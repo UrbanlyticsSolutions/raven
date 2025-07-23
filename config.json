@@ -1,0 +1,7 @@
+{
+  "model_name": "test_watershed",
+  "start_year": 2015,
+  "end_year": 2020,
+  "min_drainage_area": 25.0,
+  "buffer_distance": 3000.0
+}
