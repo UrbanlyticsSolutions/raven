@@ -1,0 +1,33 @@
+description: Simple robust model with snow module
+model_type: GR4JCN
+optional_data:
+- potential_evapotranspiration
+parameters:
+  CEMANEIGE_X1:
+    default: 1
+    max: 10
+    min: 0
+  CEMANEIGE_X2:
+    default: 0.5
+    max: 2
+    min: 0
+  GR4J_X1:
+    default: 350
+    max: 3000
+    min: 1
+  GR4J_X2:
+    default: 0
+    max: 30
+    min: -30
+  GR4J_X3:
+    default: 90
+    max: 1000
+    min: 1
+  GR4J_X4:
+    default: 1.5
+    max: 10
+    min: 1
+required_data:
+- precipitation
+- temperature_max
+- temperature_min

@@ -1,0 +1,53 @@
+best_for:
+- mountainous watersheds
+- snowmelt-dominated regions
+- British Columbia
+- operational forecasting
+description: UBC Watershed Model - Level 1 emulation of the original UBC model (Quick
+  & Pipes, 1977)
+elevation_bands: true
+emulation_level: Level 1 (near-exact)
+model_type: UBCWM
+optional_data:
+- humidity
+- wind_speed
+- solar_radiation
+parameters:
+  UBC_EVAP_SOIL_DEF:
+    default: 0.5
+    max: 1.0
+    min: 0.0
+  UBC_FLASH_PONDING:
+    default: 1.0
+    max: 10.0
+    min: 0.0
+  UBC_GROUNDWATER_SPLIT:
+    default: 0.5
+    max: 1.0
+    min: 0.0
+  UBC_INFIL_SAT_DEF:
+    default: 0.4
+    max: 1.0
+    min: 0.0
+  UBC_INFIL_SOIL_DEF:
+    default: 0.3
+    max: 1.0
+    min: 0.0
+  UBC_PREC_MULT:
+    default: 1.0
+    max: 1.5
+    min: 0.5
+  UBC_SLOW_DRAIN_RATE:
+    default: 0.05
+    max: 1.0
+    min: 0.0
+  UBC_SURFACE_RECHR:
+    default: 0.1
+    max: 1.0
+    min: 0.0
+required_data:
+- precipitation
+- temperature_max
+- temperature_min
+- potential_evapotranspiration
+snow_processes: true

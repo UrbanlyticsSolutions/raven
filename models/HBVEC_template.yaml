@@ -1,0 +1,51 @@
+description: Simple conceptual model for Canadian watersheds
+model_type: HBVEC
+optional_data:
+- humidity
+- wind_speed
+- radiation
+parameters:
+  BASEFLOW_COEFF_1:
+    default: 0.03
+    max: 0.1
+    min: 0.01
+  BASEFLOW_COEFF_2:
+    default: 0.9
+    max: 1.5
+    min: 0.5
+  FIELD_CAPACITY:
+    default: 0.13
+    max: 0.5
+    min: 0.05
+  HBV_BETA:
+    default: 0.05
+    max: 0.2
+    min: 0.01
+  MAX_CAPACITY:
+    default: 4.08
+    max: 6.0
+    min: 0.5
+  MAX_PERC_RATE:
+    default: 2.61
+    max: 5.0
+    min: 0.1
+  PERC_COEFF:
+    default: 0.06
+    max: 0.1
+    min: 0.01
+  PET_CORRECTION:
+    default: 0.998
+    max: 1.0
+    min: 0.9
+  SAT_WILT:
+    default: 0.9
+    max: 2.0
+    min: 0.1
+  SOIL_CAPACITY:
+    default: 0.05
+    max: 0.2
+    min: 0.01
+required_data:
+- precipitation
+- temperature_max
+- temperature_min
