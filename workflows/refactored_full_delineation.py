@@ -55,8 +55,8 @@ class RefactoredFullDelineation:
         shared_data_dir : str, optional
             Directory for shared spatial datasets (DEM, landcover, soil)
         """
-        self.workspace_dir = Path(workspace_dir) if workspace_dir else Path.cwd() / "delineation_workspace"
-        self.shared_data_dir = Path(shared_data_dir) if shared_data_dir else self.workspace_dir / "shared_data"
+        self.workspace_dir = Path(workspace_dir) if workspace_dir else Path.cwd() / "delineation"
+        self.shared_data_dir = Path(shared_data_dir) if shared_data_dir else self.workspace_dir / "shared"
         
         # Ensure directories exist
         self.workspace_dir.mkdir(exist_ok=True, parents=True)
@@ -82,7 +82,7 @@ class RefactoredFullDelineation:
         logger.setLevel(logging.INFO)
         
         if not logger.handlers:
-            log_file = self.workspace_dir / "refactored_delineation.log"
+            log_file = self.workspace_dir / "delineation.log"
             handler = logging.FileHandler(log_file)
             handler.setLevel(logging.INFO)
             
@@ -179,8 +179,9 @@ class RefactoredFullDelineation:
         self.logger.info(f"Delineating watershed for outlet: {outlet_name} ({outlet_lat}, {outlet_lon})")
         
         try:
-            # Create workspace for this outlet
-            outlet_workspace = self.workspace_dir / outlet_name
+            # Create workspace for this outlet with short naming
+            safe_name = outlet_name.replace('gauge_', 'g').replace('_', '')
+            outlet_workspace = self.workspace_dir / safe_name
             outlet_workspace.mkdir(exist_ok=True, parents=True)
             
             # Step 1: Watershed delineation using shared DEM
@@ -234,42 +235,71 @@ class RefactoredFullDelineation:
                 'rvc_file': model_instructions_result.get('rvc_file')
             })
             
-            # Compile results
+            # Generate actual output files
+            output_files = {}
+            
+            # Shapefiles
+            if detailed_watershed_result.get('watershed_boundary'):
+                watershed_shp = detailed_watershed_result['watershed_boundary']
+                output_files['watershed'] = watershed_shp
+                
+            if hru_result.get('sub_basins'):
+                subbasins_shp = str(outlet_workspace / 'subbasins.shp')
+                if Path(hru_result['sub_basins']).exists():
+                    import shutil
+                    shutil.copy2(hru_result['sub_basins'], subbasins_shp)
+                    shutil.copy2(hru_result['sub_basins'].replace('.shp', '.shx'), 
+                               subbasins_shp.replace('.shp', '.shx'))
+                    shutil.copy2(hru_result['sub_basins'].replace('.shp', '.dbf'), 
+                               subbasins_shp.replace('.shp', '.dbf'))
+                output_files['subbasins'] = subbasins_shp
+                
+            if hru_result.get('final_hrus'):
+                hrus_shp = str(outlet_workspace / 'hrus.shp')
+                if Path(hru_result['final_hrus']).exists():
+                    import shutil
+                    shutil.copy2(hru_result['final_hrus'], hrus_shp)
+                    shutil.copy2(hru_result['final_hrus'].replace('.shp', '.shx'), 
+                               hrus_shp.replace('.shp', '.shx'))
+                    shutil.copy2(hru_result['final_hrus'].replace('.shp', '.dbf'), 
+                               hrus_shp.replace('.shp', '.dbf'))
+                output_files['hrus'] = hrus_shp
+            
+            # Raster files
+            dem_clip = str(outlet_workspace / 'dem.tif')
+            import shutil
+            shutil.copy2(shared_datasets['dem_file'], dem_clip)
+            output_files['dem'] = dem_clip
+            
+            # RAVEN files
+            raven_files = {}
+            for key in ['rvh', 'rvp', 'rvi', 'rvt', 'rvc']:
+                file_path = locals().get(f'{key}_file')
+                if file_path and Path(file_path).exists():
+                    raven_files[key] = file_path
+                    output_files[key] = file_path
+            
+            # Save summary
+            summary = {
+                'outlet': {'lat': outlet_lat, 'lon': outlet_lon},
+                'watershed_area_km2': detailed_watershed_result.get('watershed_area_km2', 0),
+                'subbasins': hru_result.get('subbasin_count', 0),
+                'hrus': hru_result.get('total_hru_count', 0),
+                'lakes': detailed_watershed_result.get('connected_lake_count', 0),
+                'model': model_structure_result.get('selected_model')
+            }
+            
+            summary_file = str(outlet_workspace / 'summary.json')
+            with open(summary_file, 'w') as f:
+                json.dump(summary, f, indent=2)
+            output_files['summary'] = summary_file
+            
             return {
                 'success': True,
-                'workflow_type': 'Single_Outlet_Refactored',
-                'outlet_coordinates': (outlet_lat, outlet_lon),
-                'outlet_name': outlet_name,
+                'outlet': (outlet_lat, outlet_lon),
                 'workspace': str(outlet_workspace),
-                
-                # Watershed results
-                'watershed_area_km2': detailed_watershed_result.get('watershed_area_km2', 0),
-                'connected_lake_count': detailed_watershed_result.get('connected_lake_count', 0),
-                'stream_length_km': detailed_watershed_result.get('stream_length_km', 0),
-                'max_stream_order': detailed_watershed_result.get('max_stream_order', 0),
-                
-                # HRU results
-                'subbasin_count': hru_result.get('subbasin_count', 0),
-                'total_hru_count': hru_result.get('total_hru_count', 0),
-                'lake_hru_count': hru_result.get('lake_hru_count', 0),
-                
-                # Model results
-                'selected_model': model_structure_result.get('selected_model'),
-                'model_description': model_structure_result.get('model_description'),
-                'parameter_count': model_structure_result.get('parameter_count', 0),
-                'process_count': model_instructions_result.get('process_count', 0),
-                
-                # File paths
-                'watershed_boundary': detailed_watershed_result.get('watershed_boundary'),
-                'final_hrus_file': hru_result.get('final_hrus'),
-                'rvh_file': model_structure_result.get('rvh_file'),
-                'rvp_file': model_structure_result.get('rvp_file'),
-                'rvi_file': model_instructions_result.get('rvi_file'),
-                'rvt_file': model_instructions_result.get('rvt_file'),
-                'rvc_file': model_instructions_result.get('rvc_file'),
-                
-                'model_valid': final_validation_result.get('model_valid', False),
-                'model_ready_for_simulation': final_validation_result.get('model_ready_for_simulation', False)
+                'files': output_files,
+                'summary': summary
             }
             
         except Exception as e:

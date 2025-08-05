@@ -39,7 +39,7 @@ class MultiGaugeDelineation:
         workspace_dir : str, optional
             Main workspace directory
         """
-        self.workspace_dir = Path(workspace_dir) if workspace_dir else Path.cwd() / "multi_gauge_delineation"
+        self.workspace_dir = Path(workspace_dir) if workspace_dir else Path.cwd() / "multigauge"
         self.workspace_dir.mkdir(exist_ok=True, parents=True)
         
         # Initialize clients
@@ -55,7 +55,7 @@ class MultiGaugeDelineation:
         logger.setLevel(logging.INFO)
         
         if not logger.handlers:
-            log_file = self.workspace_dir / "multi_gauge_delineation.log"
+            log_file = self.workspace_dir / "multigauge.log"
             handler = logging.FileHandler(log_file)
             handler.setLevel(logging.INFO)
             
@@ -253,7 +253,7 @@ class MultiGaugeDelineation:
             # Step 3: Process each gauge individually
             for i, gauge in enumerate(valid_gauges):
                 station_id = gauge['station_id']
-                outlet_name = f"gauge_{station_id}"
+                outlet_name = f"g{station_id.replace('_', '')}"[:6]
                 
                 self.logger.info(f"Processing gauge {i+1}/{len(valid_gauges)}: {station_id} ({gauge['latitude']:.4f}, {gauge['longitude']:.4f})")
                 
