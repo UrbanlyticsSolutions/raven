@@ -99,11 +99,16 @@ class BasicAttributesCalculator:
     def _load_watershed_data(self, watershed_results: Dict) -> Tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:
         """Load catchments and rivers from your watershed analysis results"""
         
-        # Load catchments (watershed boundary)
+        # Load catchments (watershed boundary) 
         watershed_files = [f for f in watershed_results['files_created'] 
-                          if 'watershed.geojson' in f]
+                          if 'watershed' in f and f.endswith(('.geojson', '.shp'))]
         if not watershed_files:
-            raise RuntimeError("No watershed boundary found in results")
+            # Try direct watershed_file key
+            watershed_file = watershed_results.get('watershed_file')
+            if watershed_file and Path(watershed_file).exists():
+                watershed_files = [watershed_file]
+            else:
+                raise RuntimeError("No watershed boundary found in results")
         
         catchments_gdf = gpd.read_file(watershed_files[0])
         

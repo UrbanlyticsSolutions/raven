@@ -235,9 +235,9 @@ class SpatialLayersClient:
         """Download DEM from USGS 3DEP service"""
         minx, miny, maxx, maxy = bbox
         
-        # Calculate appropriate image size based on resolution
-        width = min(4000, int((maxx - minx) * 111000 / resolution))
-        height = min(4000, int((maxy - miny) * 111000 / resolution))
+        # Calculate appropriate image size based on resolution - limit to avoid USGS 500 errors
+        width = min(2000, int((maxx - minx) * 111000 / resolution))  # Max 2000 pixels
+        height = min(2000, int((maxy - miny) * 111000 / resolution))  # Max 2000 pixels
         
         params = {
             'f': 'image',
