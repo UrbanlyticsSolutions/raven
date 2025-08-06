@@ -1,10 +1,10 @@
 # Workflow Steps Library
 
-## 🎯 Overview
+## Overview
 
 The RAVEN workflow system uses a **modular step library** where individual processing steps can be combined into different workflow approaches. This design allows maximum flexibility and reusability.
 
-## 📁 Step Organization
+## Step Organization
 
 ### **Step Categories**
 ```
@@ -19,7 +19,7 @@ workflows/steps/
 └── __init__.py                  # Step registry and imports
 ```
 
-## 🔄 Step Usage in Workflows
+## Step Usage in Workflows
 
 ### **Approach A: Routing Product (5 steps)**
 ```python
@@ -61,7 +61,7 @@ steps = [
 ]
 ```
 
-## 📋 Available Steps
+## Available Steps
 
 ### **Validation Steps**
 | Step | Purpose | Used In |
@@ -103,7 +103,7 @@ steps = [
 | `SelectModelAndGenerateStructure` | Model selection + RVH/RVP | Approach B |
 | `GenerateModelInstructions` | RVI/RVT/RVC generation | Approach B |
 
-## 🏗️ Step Base Class
+## Step Base Class
 
 All steps inherit from a common base class:
 
@@ -145,7 +145,7 @@ class WorkflowStep(ABC):
             self.context_manager.mark_step_failed(self.step_name, error_msg)
 ```
 
-## 🔧 Step Implementation Pattern
+## Step Implementation Pattern
 
 Each step follows a consistent pattern:
 
@@ -190,7 +190,7 @@ class ExampleStep(WorkflowStep):
         pass
 ```
 
-## 🎯 Step Registry
+## Step Registry
 
 The step registry provides centralized access to all available steps:
 
@@ -244,7 +244,7 @@ def list_available_steps() -> list:
     return list(STEP_REGISTRY.keys())
 ```
 
-## 🔄 Custom Workflow Creation
+## Custom Workflow Creation
 
 Users can create custom workflows by combining steps:
 
@@ -279,7 +279,7 @@ custom_workflow = CustomWorkflow([
 ])
 ```
 
-## 📊 Step Dependencies
+## Step Dependencies
 
 ### **Input/Output Flow**
 ```
@@ -310,7 +310,7 @@ ValidateModel → validated_model
 | GenerateRAVEN | final_hrus | model_files |
 | ValidateModel | model_files | validated_model |
 
-## 🧪 Testing Steps
+## Testing Steps
 
 Each step includes comprehensive testing:
 
@@ -339,7 +339,7 @@ def test_example_step():
     assert 'error' in result
 ```
 
-## 🔗 Related Documentation
+## Related Documentation
 
 - [Approach A Implementation](../approach-a-routing-product.md)
 - [Approach B Implementation](../approach-b-full-delineation.md)

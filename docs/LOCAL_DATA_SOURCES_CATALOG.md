@@ -15,7 +15,7 @@ This document catalogs all **locally available data sources** in the RAVEN syste
 - **Geographic Coverage**: 
   - Longitude: -139.06° to -54.37°
   - Latitude: 42.30° to 81.95°
-- **Status**: ✅ **Local - No Network Required**
+- **Status**: **Local - No Network Required**
 
 #### **Comprehensive Attribute Catalog**
 
@@ -80,7 +80,7 @@ This document catalogs all **locally available data sources** in the RAVEN syste
 #### **Dataset Details**
 - **Records**: 986,463 rivers (North America subset)
 - **CRS**: EPSG:4326
-- **Status**: ✅ **Local - No Network Required**
+- **Status**: **Local - No Network Required**
 
 #### **Comprehensive Attribute Catalog**
 
@@ -106,13 +106,13 @@ This document catalogs all **locally available data sources** in the RAVEN syste
 - **File**: `catchment_without_merging_lakes.shp`
 - **Records**: 1,100 catchments
 - **Attributes**: Catchment ID, area, geometry
-- **Status**: ✅ **Local - Test Dataset**
+- **Status**: **Local - Test Dataset**
 
 ##### **Final Catchment Files**
 - **File**: `finalcat_info.shp`
 - **Records**: 844 final catchments
 - **Attributes**: Final HRU definitions, lake integration
-- **Status**: ✅ **Local - Test Dataset**
+- **Status**: **Local - Test Dataset**
 
 ##### **River Network Files**
 - **File**: `river_without_merging_lakes.shp`

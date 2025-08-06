@@ -180,12 +180,12 @@ Land use, soil, and vegetation class names are assigned using lookup tables prov
 Comprehensive validation of HRU generation results including geometry checks, attribute validation, and statistical summaries.
 
 ### Quality Checks
-- ✅ HRU geometry validity (no invalid polygons)
-- ✅ Area calculation accuracy
-- ✅ Attribute assignment completeness
-- ✅ Classification lookup success
-- ✅ Terrain attribute reasonableness
-- ✅ HRU size distribution analysis
+- HRU geometry validity (no invalid polygons)
+- Area calculation accuracy
+- Attribute assignment completeness
+- Classification lookup success
+- Terrain attribute reasonableness
+- HRU size distribution analysis
 
 ### Statistical Validation
 - HRU count and area summaries

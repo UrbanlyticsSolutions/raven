@@ -1,10 +1,10 @@
 # Smart Workflow Orchestrator
 
-## 🎯 Overview
+## Overview
 
 The **Smart Workflow Orchestrator** automatically selects the optimal approach (Routing Product vs Full Delineation) based on data availability and user requirements. It provides a unified interface that delivers the best performance while maintaining flexibility.
 
-## 🧠 Intelligent Selection Logic
+## Intelligent Selection Logic
 
 ### **Automatic Approach Selection**
 ```python
@@ -56,7 +56,7 @@ B = Full Delineation Approach
 H = Hybrid Approach
 ```
 
-## 🔄 Implementation
+## Implementation
 
 ### **Core Orchestrator Class**
 ```python
@@ -156,10 +156,10 @@ class SmartRAVENWorkflow:
             })
             
             if result.get('success', False):
-                self.logger.info(f"✅ Workflow completed successfully in {execution_time:.1f} minutes")
+                self.logger.info(f"Workflow completed successfully in {execution_time:.1f} minutes")
                 self.logger.info(f"Approach used: {result['approach_used']}")
             else:
-                self.logger.error(f"❌ Workflow failed: {result.get('error', 'Unknown error')}")
+                self.logger.error(f"Workflow failed: {result.get('error', 'Unknown error')}")
             
             return result
             
@@ -174,55 +174,55 @@ class SmartRAVENWorkflow:
                 'timestamp': datetime.now().isoformat()
             }
             
-            self.logger.error(f"❌ Workflow failed with exception: {str(e)}")
+            self.logger.error(f"Workflow failed with exception: {str(e)}")
             return error_result
     
     def _auto_select_and_execute(self, latitude: float, longitude: float, 
                                 outlet_name: str, **kwargs) -> Dict[str, Any]:
         """Automatically select and execute optimal approach"""
         
-        self.logger.info("🧠 Auto-selecting optimal workflow approach...")
+        self.logger.info("Auto-selecting optimal workflow approach...")
         
         # Step 1: Check routing product availability
         routing_product_info = self._check_routing_product_availability(latitude, longitude)
         
         if routing_product_info['available']:
-            self.logger.info(f"✅ Routing product available: {routing_product_info['product_path']}")
+            self.logger.info(f"Routing product available: {routing_product_info['product_path']}")
             
             # Step 2: Assess routing product quality
             quality_score = self._assess_routing_product_quality(routing_product_info, latitude, longitude)
             
             if quality_score >= 0.8:  # High quality
-                self.logger.info(f"🏆 High quality routing product (score: {quality_score:.2f}) - using Approach A")
+                self.logger.info(f"High quality routing product (score: {quality_score:.2f}) - using Approach A")
                 result = self._execute_routing_product_approach(latitude, longitude, outlet_name, **kwargs)
                 result['approach_used'] = 'routing_product'
                 result['selection_reason'] = f'High quality routing product available (score: {quality_score:.2f})'
                 
             elif quality_score >= 0.6:  # Medium quality
-                self.logger.info(f"⚖️ Medium quality routing product (score: {quality_score:.2f}) - using Hybrid approach")
+                self.logger.info(f"Medium quality routing product (score: {quality_score:.2f}) - using Hybrid approach")
                 result = self._execute_hybrid_approach(latitude, longitude, outlet_name, **kwargs)
                 result['approach_used'] = 'hybrid'
                 result['selection_reason'] = f'Medium quality routing product, using hybrid approach (score: {quality_score:.2f})'
                 
             else:  # Low quality
-                self.logger.info(f"⚠️ Low quality routing product (score: {quality_score:.2f}) - using Approach B")
+                self.logger.info(f"Low quality routing product (score: {quality_score:.2f}) - using Approach B")
                 result = self._execute_full_delineation_approach(latitude, longitude, outlet_name, **kwargs)
                 result['approach_used'] = 'full_delineation'
                 result['selection_reason'] = f'Low quality routing product, using full delineation (score: {quality_score:.2f})'
         
         else:
-            self.logger.info("❌ No routing product available - checking DEM availability")
+            self.logger.info("No routing product available - checking DEM availability")
             
             # Step 3: Check DEM availability for full delineation
             dem_available = self._check_dem_availability(latitude, longitude)
             
             if dem_available:
-                self.logger.info("✅ DEM data available - using Approach B")
+                self.logger.info("DEM data available - using Approach B")
                 result = self._execute_full_delineation_approach(latitude, longitude, outlet_name, **kwargs)
                 result['approach_used'] = 'full_delineation'
                 result['selection_reason'] = 'No routing product available, DEM-based delineation used'
             else:
-                self.logger.error("❌ Neither routing product nor DEM data available")
+                self.logger.error("Neither routing product nor DEM data available")
                 return {
                     'success': False,
                     'error': 'No data sources available for watershed delineation',
@@ -382,7 +382,7 @@ class SmartRAVENWorkflow:
         return logger
 ```
 
-## 🎯 Usage Examples
+## Usage Examples
 
 ### **Basic Usage (Automatic Selection)**
 ```python
@@ -450,7 +450,7 @@ for result in results:
           f"({result['execution_time_minutes']:.1f} min)")
 ```
 
-## 📊 Performance Monitoring
+## Performance Monitoring
 
 ### **Execution Metrics**
 ```python
@@ -494,7 +494,7 @@ class WorkflowMetrics:
         return distribution
 ```
 
-## 🔧 Configuration Options
+## Configuration Options
 
 ### **Orchestrator Configuration**
 ```python
@@ -526,7 +526,7 @@ workflow = SmartRAVENWorkflow(
 )
 ```
 
-## 🚨 Error Handling and Recovery
+## Error Handling and Recovery
 
 ### **Automatic Fallback**
 ```python
@@ -562,7 +562,7 @@ def execute_with_fallback(self, latitude: float, longitude: float, **kwargs) -> 
     }
 ```
 
-## 📈 Benefits of Smart Orchestration
+## Benefits of Smart Orchestration
 
 ### **Performance Optimization**
 - **Automatic Selection**: Always uses fastest available approach
@@ -579,7 +579,7 @@ def execute_with_fallback(self, latitude: float, longitude: float, **kwargs) -> 
 - **Monitoring**: Built-in performance tracking
 - **Scalability**: Optimized for batch processing
 
-## 🔗 Related Documentation
+## Related Documentation
 
 - [Approach A: Routing Product](./approach-a-routing-product.md)
 - [Approach B: Full Delineation](./approach-b-full-delineation.md)

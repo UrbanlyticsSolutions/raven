@@ -10,7 +10,8 @@
 - Demo data
 - Fake data
 - Fallbacks
-- DO NOT ADD CODE TO md files
+- CODE in md files
+- emoji
 
 ### **✅ ALWAYS USE:**
 - Real data from data clients

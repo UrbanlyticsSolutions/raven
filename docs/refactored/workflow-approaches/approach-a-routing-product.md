@@ -1,10 +1,10 @@
 # Approach A: Routing Product Workflow
 
-## 🎯 Overview
+## Overview
 
 The **Routing Product Workflow** leverages existing BasinMaker routing products to rapidly generate RAVEN models. This approach uses pre-processed, professionally validated watershed data to deliver results in 2-3 minutes.
 
-## ⚡ Key Advantages
+## Key Advantages
 
 - **Ultra-Fast**: 2-3 minutes total execution time
 - **No Network Required**: Uses local routing product data
@@ -13,7 +13,7 @@ The **Routing Product Workflow** leverages existing BasinMaker routing products 
 - **Consistent**: Same methodology across all watersheds
 - **Resource Efficient**: Low CPU and memory requirements
 
-## 📊 Workflow Steps (5 Total)
+## Workflow Steps (5 Total)
 
 ### **Step 1: Validate Coordinates and Find Routing Product**
 ```python
@@ -240,7 +240,7 @@ result = step.execute({
 }
 ```
 
-## 🎯 Complete Workflow Execution
+## Complete Workflow Execution
 
 ### **Python Implementation**
 ```python
@@ -257,12 +257,12 @@ result = workflow.execute_complete_workflow(
 )
 
 if result['success']:
-    print(f"✅ RAVEN model generated in {result['execution_time']:.1f} minutes")
-    print(f"📁 Model files: {len(result['model_files'])} files created")
-    print(f"🎯 HRUs: {result['total_hru_count']} hydrological response units")
-    print(f"🏞️ Area: {result['total_area_km2']:.1f} km²")
+    print(f"RAVEN model generated in {result['execution_time']:.1f} minutes")
+    print(f"Model files: {len(result['model_files'])} files created")
+    print(f"HRUs: {result['total_hru_count']} hydrological response units")
+    print(f"Area: {result['total_area_km2']:.1f} km²")
 else:
-    print(f"❌ Workflow failed: {result['error']}")
+    print(f"Workflow failed: {result['error']}")
 ```
 
 ### **Command Line Usage**
@@ -274,7 +274,7 @@ python -m workflows.routing_product --lat 45.5017 --lon -73.5673 --name Montreal
 python -m workflows.routing_product --lat 45.5017 --lon -73.5673 --routing-version v2.1
 ```
 
-## 📈 Performance Characteristics
+## Performance Characteristics
 
 ### **Execution Time Breakdown**
 - **Step 1**: Coordinate validation (5-10 seconds)
@@ -295,7 +295,7 @@ python -m workflows.routing_product --lat 45.5017 --lon -73.5673 --routing-versi
 - **Excellent performance** for operational use
 - **Batch processing** capable for multiple outlets
 
-## 🛠️ Data Requirements
+## Data Requirements
 
 ### **Required Routing Product Files**
 ```
@@ -316,7 +316,7 @@ routing_product_folder/
 - **North America**: Partial coverage available
 - **Global**: Limited to specific regions
 
-## 🚨 Limitations and Considerations
+## Limitations and Considerations
 
 ### **Geographic Limitations**
 - **Coverage Dependent**: Only works where routing products exist
@@ -333,7 +333,7 @@ routing_product_folder/
 - **Fixed Thresholds**: Cannot adjust lake/stream detection criteria
 - **Template Based**: Model configuration follows standard templates
 
-## ✅ Best Practices
+## Best Practices
 
 ### **Pre-Execution Checks**
 1. Verify routing product availability for target coordinates
@@ -353,7 +353,7 @@ routing_product_folder/
 3. Review workspace permissions if file operations fail
 4. Consult routing product documentation for troubleshooting
 
-## 🔗 Related Documentation
+## Related Documentation
 
 - [Routing Product Data Sources](../data-sources/routing-products.md)
 - [BasinMaker Integration Guide](../integration/basinmaker.md)

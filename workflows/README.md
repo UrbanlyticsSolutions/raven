@@ -20,10 +20,10 @@ result = workflow.execute_complete_workflow(
 )
 
 if result['success']:
-    print(f"✅ RAVEN model generated successfully!")
-    print(f"📁 Model files: {result['raven_model_files']}")
+    print(f"RAVEN model generated successfully!")
+    print(f"Model files: {result['raven_model_files']}")
 else:
-    print(f"❌ Workflow failed: {result['error']}")
+    print(f"Workflow failed: {result['error']}")
 ```
 
 ## Workflow Steps
@@ -98,18 +98,18 @@ Complete 5-file RAVEN model ready for simulation:
 
 ## Implementation Status
 
-### ✅ Completed
+### Completed
 - Workflow framework and orchestrator
 - Context management integration
 - Steps 1-6 (outlet processing + DEM download/prep)
 - Error handling and logging
 
-### 🔄 In Progress
+### In Progress
 - Steps 7-22 implementation
 - BasinMaker processor integration
 - RAVEN file generation
 
-### 📋 Planned
+### Planned
 - Complete workflow testing
 - Performance optimization
 - Additional model templates

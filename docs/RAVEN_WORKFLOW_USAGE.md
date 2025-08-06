@@ -1,10 +1,10 @@
 # RAVEN Workflow System - Usage Guide
 
-## 🌊 Overview
+## Overview
 
 The RAVEN Workflow System transforms outlet coordinates into complete hydrological models ready for simulation. It provides two complementary approaches and a main driver script for easy execution.
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Method 1: Direct Python Execution
 ```bash
@@ -41,7 +41,7 @@ chmod +x run_raven_workflow.sh
 ./run_raven_workflow.sh --lat 45.5017 --lon -73.5673 --project "MyProject"
 ```
 
-## 📋 Command Line Options
+## Command Line Options
 
 ### Required Arguments
 - `--lat, --latitude`: Outlet latitude in decimal degrees (-90 to 90)
@@ -58,7 +58,7 @@ chmod +x run_raven_workflow.sh
 - `--help`: Show help message and exit
 - `--version`: Show version information
 
-## 🔧 Workflow Approaches
+## Workflow Approaches
 
 ### Approach A: Fast Routing Product Workflow
 - **Duration**: 2-3 minutes
@@ -91,7 +91,7 @@ chmod +x run_raven_workflow.sh
 7. Generate model instructions
 8. Validate complete model
 
-## 📁 Output Structure
+## Output Structure
 
 Each workflow creates a workspace directory with the following structure:
 
@@ -107,7 +107,7 @@ workspaces/{project_name}/
 └── intermediate/      # Intermediate processing files
 ```
 
-## 🎯 Usage Examples
+## Usage Examples
 
 ### Example 1: Montreal Watershed (Auto-select)
 ```bash
@@ -144,13 +144,13 @@ python raven_workflow_driver.py --lat 46.8139 --lon -71.2080 --project "Site_2"
 python raven_workflow_driver.py --lat 43.6532 --lon -79.3832 --project "Site_3"
 ```
 
-## 🔍 Troubleshooting
+## Troubleshooting
 
 ### Common Issues and Solutions
 
 **1. Coordinate Validation Errors**
 ```
-❌ Error: Latitude 95.0 must be between -90 and 90
+Error: Latitude 95.0 must be between -90 and 90
 ```
 - **Solution**: Ensure latitude is between -90 and 90, longitude between -180 and 180
 
@@ -177,15 +177,15 @@ WARNING: pyflwdir not available - install with: pip install pyflwdir
 - Use `--log-level DEBUG` for maximum verbosity
 - Look for specific error messages and stack traces
 
-## 📊 Expected Results
+## Expected Results
 
 ### Successful Execution Output
 ```
-🎉 APPROACH A COMPLETED SUCCESSFULLY!
-⏱️ Execution time: 45.2 seconds
-📊 Generated 6 files
-🏞️ Created 12 HRUs
-📁 Output location: ./workspaces/MyProject
+APPROACH A COMPLETED SUCCESSFULLY!
+Execution time: 45.2 seconds
+Generated 6 files
+Created 12 HRUs
+Output location: ./workspaces/MyProject
 ```
 
 ### Generated Model Statistics
@@ -194,7 +194,7 @@ WARNING: pyflwdir not available - install with: pip install pyflwdir
 - **Files**: 5 RAVEN files + 1 summary + intermediate files
 - **Validation**: All files checked for RAVEN compatibility
 
-## 🔄 Next Steps After Generation
+## Next Steps After Generation
 
 1. **Review Generated Files**: Examine the 5 RAVEN files in your workspace
 2. **Add Climate Data**: Populate the `.rvt` file with forcing data
@@ -202,7 +202,7 @@ WARNING: pyflwdir not available - install with: pip install pyflwdir
 4. **Run RAVEN**: Execute RAVEN simulation with generated model
 5. **Analyze Results**: Process RAVEN output for your analysis
 
-## 🆘 Getting Help
+## Getting Help
 
 ### Command Line Help
 ```bash
@@ -219,15 +219,15 @@ python raven_workflow_driver.py --version
 python workflows/test_complete_workflow.py
 ```
 
-## 🏆 System Capabilities
+## System Capabilities
 
-- ✅ **Global Coverage**: Works with any valid coordinates worldwide
-- ✅ **Automatic Model Selection**: Chooses optimal RAVEN model type
-- ✅ **Robust Error Handling**: Graceful failure with informative messages
-- ✅ **Production Ready**: 100% test success rate, comprehensive validation
-- ✅ **Fast Execution**: 2-3 minutes (Approach A) to 15-30 minutes (Approach B)
-- ✅ **Complete Output**: Ready-to-run RAVEN model files
+- **Global Coverage**: Works with any valid coordinates worldwide
+- **Automatic Model Selection**: Chooses optimal RAVEN model type
+- **Robust Error Handling**: Graceful failure with informative messages
+- **Production Ready**: 100% test success rate, comprehensive validation
+- **Fast Execution**: 2-3 minutes (Approach A) to 15-30 minutes (Approach B)
+- **Complete Output**: Ready-to-run RAVEN model files
 
 ---
 
-**The RAVEN Workflow System successfully transforms outlet coordinates into complete hydrological models ready for simulation.** 🌊
+**The RAVEN Workflow System successfully transforms outlet coordinates into complete hydrological models ready for simulation.**

@@ -141,7 +141,7 @@ class ComprehensiveLakeDetector:
             results['success'] = True
             
             print("\n" + "=" * 60)
-            print("✅ LAKE DETECTION & CLASSIFICATION COMPLETE")
+            print("LAKE DETECTION & CLASSIFICATION COMPLETE")
             print("=" * 60)
             print(f"Total lakes detected: {results['raw_lake_count']}")
             print(f"Total lake area: {results['raw_total_area_ha']:.1f} hectares")
@@ -151,7 +151,7 @@ class ComprehensiveLakeDetector:
             
         except Exception as e:
             results['error'] = str(e)
-            print(f"\n❌ Error: {e}")
+            print(f"\nError: {e}")
             
         return results
     
@@ -487,12 +487,12 @@ def test_comprehensive_lake_detection():
     )
     
     if results['success']:
-        print("\n✅ Comprehensive lake detection test successful!")
+        print("\nComprehensive lake detection test successful!")
         print(f"   Lakes detected: {results['raw_lake_count']}")
         print(f"   Total area: {results['raw_total_area_ha']:.1f} hectares")
         print(f"   Files created: {len(results['files_created'])}")
     else:
-        print(f"\n❌ Test failed: {results.get('error', 'Unknown error')}")
+        print(f"\n[FAILED] Test failed: {results.get('error', 'Unknown error')}")
     
     return results
 

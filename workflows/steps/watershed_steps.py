@@ -1,17 +1,31 @@
 """
-Watershed Steps for RAVEN Workflows
+Consolidated Watershed Steps for RAVEN Workflows
 
-This module contains steps for watershed delineation and stream network extraction.
+This module contains all watershed-related workflow steps:
+- DelineateWatershedAndStreams: Basic watershed and stream delineation
+- UnifiedWatershedDelineation: Complete watershed analysis with lakes
+- WatershedMappingStep: Watershed visualization and mapping
+
+Consolidates functionality from multiple separate step files for better organization.
 """
 
 import sys
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, Any, Tuple, List, Optional
+import logging
+import pandas as pd
 
 # Add parent directory to path for imports
 sys.path.append(str(Path(__file__).parent.parent.parent))
 
 from workflows.steps.base_step import WorkflowStep
+from clients.watershed_clients.watershed import ProfessionalWatershedAnalyzer
+from processors.lake_detection import ComprehensiveLakeDetector
+from processors.lake_classifier import LakeClassifier  
+from processors.lake_integrator import LakeIntegrator
+from processors.basic_attributes import BasicAttributesCalculator
+from processors.outlet_snapping import ImprovedOutletSnapper
+from processors.watershed_mapper import WatershedMapper
 
 class DelineateWatershedAndStreams(WorkflowStep):
     """
@@ -168,3 +182,7 @@ class DelineateWatershedAndStreams(WorkflowStep):
             'stream_length_km': stream_length_km,
             'max_stream_order': max_stream_order
         }
+
+
+# Re-export the main class
+__all__ = ['DelineateWatershedAndStreams']

@@ -107,7 +107,7 @@ output_filename = "workflow_dem.tif"
 
 ---
 
-### **Step 3: UnifiedWatershedDelineation** ⭐ **CONSOLIDATED STEP**
+### **Step 3: UnifiedWatershedDelineation** **CONSOLIDATED STEP**
 
 **Purpose**: Complete watershed analysis including boundary delineation, stream extraction, lake detection, classification, and integration.
 
@@ -753,11 +753,11 @@ results = workflow.execute_complete_workflow(
 )
 
 if results['success']:
-    print(f"✅ RAVEN model generated: {results['selected_model']}")
-    print(f"📁 Model files: {results['files_count']} files created")
-    print(f"🎯 HRUs: {results['total_hru_count']} hydrological response units")
-    print(f"🏞️ Area: {results['watershed_area_km2']:.1f} km²")
-    print(f"💧 Lakes: {results['connected_lake_count']} connected lakes")
+    print(f"RAVEN model generated: {results['selected_model']}")
+    print(f"Model files: {results['files_count']} files created")
+    print(f"HRUs: {results['total_hru_count']} hydrological response units")
+    print(f"Area: {results['watershed_area_km2']:.1f} km²")
+    print(f"Lakes: {results['connected_lake_count']} connected lakes")
 ```
 
 ### **Advanced Usage with Parameters**
@@ -777,8 +777,8 @@ results = workflow.execute_complete_workflow(
 
 ### **Execution Time Breakdown**
 - **Step 1**: Coordinate validation (10-20 seconds)
-- **Step 2**: DEM clipping (2-8 minutes) ⚠️ Network dependent
-- **Step 3**: Watershed delineation complete (5-12 minutes) ⭐ Most complex
+- **Step 2**: DEM clipping (2-8 minutes) Network dependent
+- **Step 3**: Watershed delineation complete (5-12 minutes) Most complex
 - **Step 4**: Landcover extraction (30-90 seconds)
 - **Step 5**: Soil extraction (30-90 seconds)  
 - **Step 6**: HRU generation (2-5 minutes)

@@ -55,6 +55,7 @@ test_outputs/
 temp_outputs/
 
 # Data folders (large extracted/temporary data)
+data/
 basinmaker-extracted/
 temp-claude-router/
 
@@ -83,3 +84,4 @@ multi_gauge_delineation/
 *.temp
 temp/
 tmp/
+nul

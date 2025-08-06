@@ -368,10 +368,15 @@ class CreateSubBasinsAndHRUs(WorkflowStep):
                         remaining_area = remaining_area.difference(lake.geometry)
             
             if not remaining_area.is_empty and remaining_area.area > 0:
+                # Get subbasin_id - handle both column name variations
+                subbasin_id = getattr(subbasin, 'subbasin_id', idx + 1)
+                if hasattr(subbasin, 'subbasin_i'):  # Shapefile truncated column name
+                    subbasin_id = subbasin.subbasin_i
+                
                 land_hru = {
                     'hru_id': f"LAND_{idx+1}",
                     'hru_type': 'LAND',
-                    'subbasin_id': subbasin['subbasin_id'],
+                    'subbasin_id': subbasin_id,
                     'area_km2': remaining_area.area * 111 * 111,
                     'landuse_class': 'FOREST',  # From BasinMaker lookup
                     'soil_class': 'LOAM',

@@ -30,8 +30,8 @@ from .dem_clipping_step import (
 )
 
 # Consolidated watershed + lake processing
-from .watershed_delineation_complete import (
-    UnifiedWatershedDelineation
+from .watershed_steps import (
+    DelineateWatershedAndStreams
 )
 
 # Separate landcover and soil extraction
@@ -54,6 +54,11 @@ from .raven_generation_steps import (
     GenerateModelInstructions
 )
 
+# Project management system
+from .project_management_step import (
+    ProjectManagementStep
+)
+
 # Consolidated step registry (removed overlapping functions)
 STEP_REGISTRY = {
     # Validation steps
@@ -68,7 +73,7 @@ STEP_REGISTRY = {
     'clip_dem': DEMClippingStep,
     
     # Consolidated watershed + lake processing (replaces delineate_watershed_streams + detect_classify_lakes)
-    'watershed_delineation_complete': UnifiedWatershedDelineation,
+    'watershed_delineation_complete': DelineateWatershedAndStreams,
     
     # Separate data extraction steps (replaces integrate_landcover_soil)
     'extract_landcover': LandcoverExtractionStep,
@@ -81,7 +86,10 @@ STEP_REGISTRY = {
     # RAVEN generation steps
     'generate_raven_files': GenerateRAVENModelFiles,
     'select_model_structure': SelectModelAndGenerateStructure,
-    'generate_model_instructions': GenerateModelInstructions
+    'generate_model_instructions': GenerateModelInstructions,
+    
+    # Project management
+    'project_manager': ProjectManagementStep
 }
 
 # Consolidated workflow approach step combinations
@@ -180,6 +188,7 @@ __all__ = [
     'GenerateRAVENModelFiles',
     'SelectModelAndGenerateStructure',
     'GenerateModelInstructions',
+    'ProjectManager',                    # Project and file management
     
     # Utility functions
     'get_step',

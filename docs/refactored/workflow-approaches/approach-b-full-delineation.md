@@ -1,10 +1,10 @@
 # Approach B: Full Delineation Workflow
 
-## 🎯 Overview
+## Overview
 
 The **Full Delineation Workflow** creates complete watershed models from scratch using DEM analysis and hydrological processing. This approach provides maximum flexibility and global coverage at the cost of longer processing time.
 
-## 🌍 Key Advantages
+## Key Advantages
 
 - **Universal Coverage**: Works anywhere with DEM data availability
 - **Fully Customizable**: Complete control over resolution and methodology
@@ -13,7 +13,7 @@ The **Full Delineation Workflow** creates complete watershed models from scratch
 - **Transparent**: Full visibility into all processing steps
 - **Flexible**: Handles any watershed size or complexity
 
-## 📊 Workflow Steps (8 Total)
+## Workflow Steps (8 Total)
 
 ### **Step 1: Validate Coordinates and Set DEM Area**
 ```python
@@ -61,7 +61,7 @@ else:
 
 ---
 
-### **Step 2: Download and Prepare DEM** ⚠️ **NETWORK REQUIRED**
+### **Step 2: Download and Prepare DEM** **NETWORK REQUIRED**
 ```python
 from workflows.steps.dem_processing_steps import DownloadAndPrepareDEM
 
@@ -422,7 +422,7 @@ result = step.execute({
 }
 ```
 
-## 🎯 Complete Workflow Execution
+## Complete Workflow Execution
 
 ### **Python Implementation**
 ```python
@@ -439,13 +439,13 @@ result = workflow.execute_complete_workflow(
 )
 
 if result['success']:
-    print(f"✅ RAVEN model generated in {result['execution_time']:.1f} minutes")
-    print(f"📁 Model files: {len(result['model_files'])} files created")
-    print(f"🎯 HRUs: {result['total_hru_count']} hydrological response units")
-    print(f"🏞️ Area: {result['total_area_km2']:.1f} km²")
-    print(f"💧 Lakes: {result['lake_count']} significant lakes integrated")
+    print(f"RAVEN model generated in {result['execution_time']:.1f} minutes")
+    print(f"Model files: {len(result['model_files'])} files created")
+    print(f"HRUs: {result['total_hru_count']} hydrological response units")
+    print(f"Area: {result['total_area_km2']:.1f} km²")
+    print(f"Lakes: {result['lake_count']} significant lakes integrated")
 else:
-    print(f"❌ Workflow failed: {result['error']}")
+    print(f"Workflow failed: {result['error']}")
 ```
 
 ### **Command Line Usage**
@@ -460,11 +460,11 @@ python -m workflows.full_delineation --lat 45.5017 --lon -73.5673 --dem-res 10m
 python -m workflows.full_delineation --lat 45.5017 --lon -73.5673 --buffer 30
 ```
 
-## 📈 Performance Characteristics
+## Performance Characteristics
 
 ### **Execution Time Breakdown**
 - **Step 1**: Coordinate validation and DEM area (10-20 seconds)
-- **Step 2**: DEM download and processing (5-15 minutes) ⚠️
+- **Step 2**: DEM download and processing (5-15 minutes)
 - **Step 3**: Watershed and stream delineation (2-5 minutes)
 - **Step 4**: Lake detection and classification (1-3 minutes)
 - **Step 5**: Sub-basin and HRU generation (3-7 minutes)
@@ -484,7 +484,7 @@ python -m workflows.full_delineation --lat 45.5017 --lon -73.5673 --buffer 30
 - **Watershed Complexity**: Linear scaling with stream network
 - **Lake Count**: Linear scaling with lake processing
 
-## 🛠️ Customization Options
+## Customization Options
 
 ### **DEM Processing Parameters**
 ```python
@@ -517,7 +517,7 @@ hru_config = {
 }
 ```
 
-## 🚨 Limitations and Considerations
+## Limitations and Considerations
 
 ### **Network Dependencies**
 - **Critical**: Step 2 requires stable internet for DEM download
@@ -534,7 +534,7 @@ hru_config = {
 - **Temporal Currency**: DEM data may not reflect recent changes
 - **Validation Required**: Results need quality control review
 
-## ✅ Best Practices
+## Best Practices
 
 ### **Pre-Execution Planning**
 1. Verify adequate disk space (1-2 GB recommended)
@@ -560,7 +560,7 @@ hru_config = {
 3. Review outlet coordinates if watershed delineation fails
 4. Check intermediate files if processing stops unexpectedly
 
-## 🔗 Related Documentation
+## Related Documentation
 
 - [DEM Data Sources and Processing](../data-sources/elevation-data.md)
 - [WhiteboxTools Integration](../integration/whitebox-tools.md)

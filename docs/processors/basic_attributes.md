@@ -283,21 +283,21 @@ validation_results = calculator.validate_attributes(basic_attributes)
 # Check for anomalies
 if validation_results['warnings']:
     for warning in validation_results['warnings']:
-        print(f"⚠️  {warning}")
+        print(f"Warning: {warning}")
 
 # Review statistics
 stats = validation_results['statistics']
-print(f"📊 Processed {stats['Area_km2']['count_zero']} features")
-print(f"📊 Area range: {stats['Area_km2']['min']:.3f} - {stats['Area_km2']['max']:.3f} km²")
+print(f"Processed {stats['Area_km2']['count_zero']} features")
+print(f"Area range: {stats['Area_km2']['min']:.3f} - {stats['Area_km2']['max']:.3f} km²")
 ```
 
 ### Quality Checks
-- ✅ Non-zero area validation
-- ✅ Reasonable elevation ranges
-- ✅ Valid slope values (0-90 degrees)
-- ✅ Aspect values (0-360 degrees)
-- ✅ River length consistency
-- ✅ Routing topology validation
+- Non-zero area validation
+- Reasonable elevation ranges
+- Valid slope values (0-90 degrees)
+- Aspect values (0-360 degrees)
+- River length consistency
+- Routing topology validation
 
 ## Example Usage
 
@@ -357,7 +357,7 @@ logging.basicConfig(level=logging.DEBUG)
 
 # Check WhiteboxTools availability
 if calculator.has_whitebox:
-    print("✅ WhiteboxTools available")
+    print("WhiteboxTools available")
 else:
     print("⚠️  WhiteboxTools not available - using defaults")
 ```

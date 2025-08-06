@@ -327,21 +327,21 @@ validation_results = calculator.validate_manning_coefficients(manning_results)
 # Check for anomalies  
 if validation_results['warnings']:
     for warning in validation_results['warnings']:
-        print(f"⚠️  {warning}")
+        print(f"Warning: {warning}")
 
 # Review Manning's n statistics
 stats = validation_results['statistics']
-print(f"📊 Channel n range: {stats['Ch_Manning_n']['min']:.3f} - {stats['Ch_Manning_n']['max']:.3f}")
-print(f"📊 Floodplain n range: {stats['Fp_Manning_n']['min']:.3f} - {stats['Fp_Manning_n']['max']:.3f}")
+print(f"Channel n range: {stats['Ch_Manning_n']['min']:.3f} - {stats['Ch_Manning_n']['max']:.3f}")
+print(f"Floodplain n range: {stats['Fp_Manning_n']['min']:.3f} - {stats['Fp_Manning_n']['max']:.3f}")
 ```
 
 ### Quality Checks
-- ✅ Manning's n values within reasonable range (0.015-0.080)
-- ✅ Floodplain n greater than channel n
-- ✅ Land use coverage validation
-- ✅ Channel width consistency
-- ✅ Seasonal adjustment verification
-- ✅ Spatial coverage assessment
+- Manning's n values within reasonable range (0.015-0.080)
+- Floodplain n greater than channel n
+- Land use coverage validation
+- Channel width consistency
+- Seasonal adjustment verification
+- Spatial coverage assessment
 
 ### Sensitivity Analysis
 ```python

@@ -7,10 +7,10 @@ Available Workflows:
 - Multi-Gauge Delineation: Multiple gauge processing with unified data management
 """
 
-from .refactored_full_delineation import RefactoredFullDelineation
+from .single_outlet_delineation import SingleOutletDelineation
 from .multi_gauge_delineation import MultiGaugeDelineation
 
 __all__ = [
-    'RefactoredFullDelineation',
+    'SingleOutletDelineation', 
     'MultiGaugeDelineation'
 ]

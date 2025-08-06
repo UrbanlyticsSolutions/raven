@@ -143,12 +143,12 @@ Use classification results as input for LakeIntegrator to modify watershed routi
 The processor includes comprehensive validation of lake classification results including geometry checks, area calculations, and intersection verification.
 
 ### Quality Checks
-- ✅ Lake geometry validation (no invalid polygons)
-- ✅ Area calculation accuracy
-- ✅ Stream intersection detection
-- ✅ Classification consistency
-- ✅ Spatial topology validation
-- ✅ Threshold compliance verification
+- Lake geometry validation (no invalid polygons)
+- Area calculation accuracy
+- Stream intersection detection
+- Classification consistency
+- Spatial topology validation
+- Threshold compliance verification
 
 ### Spatial Validation
 - Checks for lakes outside watershed boundaries

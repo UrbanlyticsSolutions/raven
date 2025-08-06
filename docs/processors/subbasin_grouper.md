@@ -177,11 +177,11 @@ print(f"Warnings: {validation['warnings']}")
 ```
 
 ### Quality Checks
-- ✅ Topology validation (upstream-downstream relationships)
-- ✅ Group size distribution analysis
-- ✅ Channel length threshold compliance
-- ✅ Lake area threshold compliance
-- ✅ Connectivity preservation
+- Topology validation (upstream-downstream relationships)
+- Group size distribution analysis
+- Channel length threshold compliance
+- Lake area threshold compliance
+- Connectivity preservation
 
 ## Performance Considerations
 

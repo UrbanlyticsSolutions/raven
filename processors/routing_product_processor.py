@@ -176,7 +176,7 @@ class RoutingProductProcessor:
             ]
             
             print("\n" + "=" * 70)
-            print("✅ ROUTING PRODUCT PROCESSING COMPLETE")
+            print("ROUTING PRODUCT PROCESSING COMPLETE")
             print("=" * 70)
             print(f"RAVEN model ready: {model_name}")
             print(f"Watershed area: {watershed_result.get('area_km2', 0):.1f} km²")
@@ -185,7 +185,7 @@ class RoutingProductProcessor:
             
         except Exception as e:
             results['error'] = str(e)
-            print(f"\n❌ Error: {e}")
+            print(f"\nError: {e}")
             
         return results
     
@@ -489,11 +489,11 @@ def test_routing_processor():
     )
     
     if test_result['success']:
-        print("\n✅ Routing processor test successful!")
+        print("\n[SUCCESS] Routing processor test successful!")
         print(f"   Files created: {len(test_result['files_created'])}")
         print(f"   Workspace: {processor.workspace_dir}")
     else:
-        print(f"\n❌ Test failed: {test_result.get('error', 'Unknown error')}")
+        print(f"\n[FAILED] Test failed: {test_result.get('error', 'Unknown error')}")
     
     return test_result
 

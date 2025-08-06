@@ -263,21 +263,21 @@ validation_results = calculator.validate_hydraulic_attributes(hydraulic_attribut
 # Check for anomalies
 if validation_results['warnings']:
     for warning in validation_results['warnings']:
-        print(f"⚠️  {warning}")
+        print(f"Warning: {warning}")
 
 # Review hydraulic statistics
 stats = validation_results['statistics']
-print(f"📊 Discharge range: {stats['Ch_Q_Bkf']['min']:.3f} - {stats['Ch_Q_Bkf']['max']:.3f} m³/s")
-print(f"📊 Width range: {stats['Ch_W_Bkf']['min']:.1f} - {stats['Ch_W_Bkf']['max']:.1f} m")
+print(f"Discharge range: {stats['Ch_Q_Bkf']['min']:.3f} - {stats['Ch_Q_Bkf']['max']:.3f} m³/s")
+print(f"Width range: {stats['Ch_W_Bkf']['min']:.1f} - {stats['Ch_W_Bkf']['max']:.1f} m")
 ```
 
 ### Quality Checks
-- ✅ Positive discharge values
-- ✅ Reasonable width/depth ratios (2-50)
-- ✅ Q-DA relationship consistency
-- ✅ Hydraulic geometry relationships
-- ✅ Cross-sectional area calculations
-- ✅ Channel type consistency
+- Positive discharge values
+- Reasonable width/depth ratios (2-50)
+- Q-DA relationship consistency
+- Hydraulic geometry relationships
+- Cross-sectional area calculations
+- Channel type consistency
 
 ### Diagnostic Plots
 ```python
