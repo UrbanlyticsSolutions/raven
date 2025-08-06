@@ -140,9 +140,13 @@ class SoilExtractionStep:
                 self.logger.info("Successfully obtained real soil data")
                 return real_data_result
             else:
-                self.logger.warning(f"Real soil data unavailable: {real_data_result.get('error', 'Unknown error')}")
-                self.logger.info("Creating synthetic soil data as fallback")
-                return self._create_synthetic_soil_data(bounds, soil_file)
+                error_msg = f"Real soil data unavailable: {real_data_result.get('error', 'Unknown error')} - No synthetic fallback provided"
+                self.logger.error(error_msg)
+                return {
+                    'success': False,
+                    'error': error_msg,
+                    'step_type': 'soil_extraction'
+                }
             
         except Exception as e:
             error_msg = f"Soil extraction failed: {str(e)}"

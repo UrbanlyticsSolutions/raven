@@ -99,9 +99,13 @@ class LandcoverExtractionStep:
                 self.logger.info("Successfully obtained real landcover data")
                 return real_data_result
             else:
-                self.logger.warning(f"Real landcover data unavailable: {real_data_result.get('error', 'Unknown error')}")
-                self.logger.info("Creating synthetic landcover data as fallback")
-                return self._create_synthetic_landcover(bounds, landcover_file)
+                error_msg = f"Real landcover data unavailable: {real_data_result.get('error', 'Unknown error')} - No synthetic fallback provided"
+                self.logger.error(error_msg)
+                return {
+                    'success': False,
+                    'error': error_msg,
+                    'step_type': 'landcover_extraction'
+                }
             
         except Exception as e:
             error_msg = f"Landcover extraction failed: {str(e)}"

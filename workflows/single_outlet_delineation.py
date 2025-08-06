@@ -250,9 +250,23 @@ class SingleOutletDelineation:
             return dem_result
         datasets['dem_file'] = dem_result['dem_file']
         
-        # Skip landcover/soil failures and use synthetic
-        datasets['landcover_file'] = str(Path(self.data_dir) / "synthetic_landcover.tif")
-        datasets['soil_file'] = str(Path(self.data_dir) / "synthetic_soil.tif")
+        # Landcover - download actual data
+        landcover_result = self.landcover_step.execute(
+            bounds=final_bounds,
+            output_filename="landcover.tif"
+        )
+        if not landcover_result['success']:
+            return landcover_result
+        datasets['landcover_file'] = landcover_result['landcover_file']
+        
+        # Soil - download actual data  
+        soil_result = self.soil_step.execute(
+            bounds=final_bounds,
+            output_filename="soil.tif"
+        )
+        if not soil_result['success']:
+            return soil_result
+        datasets['soil_file'] = soil_result['soil_file']
         
         return {
             'success': True,
@@ -311,7 +325,111 @@ class SingleOutletDelineation:
             if not detailed_watershed_result['success']:
                 return detailed_watershed_result
             
-            # Step 2: Create HRUs using datasets
+            # Step 2: Lake detection
+            self.logger.info("Detecting lakes within watershed...")
+            lake_detection_result = self.lake_detector.detect_lakes_in_watershed(
+                dem_file=datasets['dem_file'],
+                watershed_boundary=detailed_watershed_result.get('watershed_boundary'),
+                output_dir=outlet_workspace / 'lakes',
+                min_lake_area_km2=0.01  # 1 hectare minimum
+            )
+            
+            if not lake_detection_result['success']:
+                self.logger.warning(f"Lake detection failed: {lake_detection_result.get('error')}")
+                # Continue without lakes
+                lake_detection_result = {
+                    'success': True,
+                    'lakes_detected_file': None,
+                    'lake_count': 0,
+                    'total_lake_area_km2': 0
+                }
+                
+            # Step 3: Lake classification (connected vs non-connected)
+            if lake_detection_result.get('lakes_detected_file'):
+                self.logger.info("Classifying lakes as connected vs non-connected...")
+                from processors.lake_classifier import LakeClassifier
+                lake_classifier = LakeClassifier()
+                
+                lake_classification_result = lake_classifier.classify_lakes(
+                    lakes_file=lake_detection_result['lakes_detected_file'],
+                    stream_network=detailed_watershed_result.get('stream_network'),
+                    output_dir=outlet_workspace / 'lakes'
+                )
+                
+                if lake_classification_result['success']:
+                    # Update results with classification
+                    detailed_watershed_result.update({
+                        'connected_lakes_file': lake_classification_result.get('connected_lakes_file'),
+                        'non_connected_lakes_file': lake_classification_result.get('non_connected_lakes_file'),
+                        'connected_lake_count': lake_classification_result.get('connected_lake_count', 0),
+                        'non_connected_lake_count': lake_classification_result.get('non_connected_lake_count', 0),
+                        'total_lake_area_km2': lake_detection_result.get('total_lake_area_km2', 0)
+                    })
+                    self.logger.info(f"Lakes classified: {lake_classification_result.get('connected_lake_count', 0)} connected, {lake_classification_result.get('non_connected_lake_count', 0)} non-connected")
+                else:
+                    self.logger.warning(f"Lake classification failed: {lake_classification_result.get('error')}")
+            else:
+                # No lakes detected
+                detailed_watershed_result.update({
+                    'connected_lakes_file': None,
+                    'non_connected_lakes_file': None,
+                    'connected_lake_count': 0,
+                    'non_connected_lake_count': 0,
+                    'total_lake_area_km2': 0
+                })
+            
+            if lake_detection_result['success']:
+                # Add lake information to watershed result
+                detailed_watershed_result.update({
+                    'lakes_detected_file': lake_detection_result.get('all_lakes_file'),
+                    'connected_lakes_file': lake_detection_result.get('connected_lakes_file'), 
+                    'non_connected_lakes_file': lake_detection_result.get('non_connected_lakes_file'),
+                    'connected_lake_count': lake_detection_result.get('connected_lake_count', 0),
+                    'non_connected_lake_count': lake_detection_result.get('non_connected_lake_count', 0),
+                    'total_lake_area_km2': lake_detection_result.get('total_lake_area_km2', 0)
+                })
+                self.logger.info(f"Lakes detected: {lake_detection_result.get('total_lake_count', 0)} total")
+            else:
+                self.logger.warning(f"Lake detection failed: {lake_detection_result.get('error')}")
+                # Continue without lakes
+                detailed_watershed_result.update({
+                    'connected_lakes_file': None,
+                    'non_connected_lakes_file': None,
+                    'connected_lake_count': 0,
+                    'non_connected_lake_count': 0,
+                    'total_lake_area_km2': 0
+                })
+                
+            # Step 4: Lake-stream integration
+            if detailed_watershed_result.get('connected_lakes_file'):
+                self.logger.info("Integrating stream network with connected lakes...")
+                from processors.lake_integrator import LakeIntegrator
+                lake_integrator = LakeIntegrator()
+                
+                integration_result = lake_integrator.integrate_lakes_with_streams(
+                    stream_network=detailed_watershed_result.get('stream_network'),
+                    connected_lakes=detailed_watershed_result.get('connected_lakes_file'),
+                    watershed_boundary=detailed_watershed_result.get('watershed_boundary'),
+                    output_dir=outlet_workspace / 'lakes'
+                )
+                
+                if integration_result['success']:
+                    detailed_watershed_result.update({
+                        'integrated_stream_network': integration_result.get('integrated_streams_file'),
+                        'lake_routing_file': integration_result.get('lake_routing_file'),
+                        'modified_routing_table': integration_result.get('routing_table_file'),
+                        'lakes_integrated': integration_result.get('lakes_integrated_count', 0)
+                    })
+                    self.logger.info(f"Stream-lake integration completed: {integration_result.get('lakes_integrated_count', 0)} lakes integrated")
+                else:
+                    self.logger.warning(f"Lake integration failed: {integration_result.get('error')}")
+                    # Use original stream network
+                    detailed_watershed_result['integrated_stream_network'] = detailed_watershed_result.get('stream_network')
+            else:
+                # No connected lakes - use original stream network
+                detailed_watershed_result['integrated_stream_network'] = detailed_watershed_result.get('stream_network')
+            
+            # Step 5: Create HRUs using datasets (including lakes)
             watershed_boundary = detailed_watershed_result.get('watershed_boundary')
             if not watershed_boundary:
                 error_msg = f"Watershed step missing watershed_boundary. Available keys: {list(detailed_watershed_result.keys())}"
@@ -334,7 +452,7 @@ class SingleOutletDelineation:
             if not hru_result['success']:
                 return hru_result
             
-            # Step 3: Generate model structure
+            # Step 6: Generate model structure
             model_structure_result = self.model_structure_step.execute({
                 'final_hrus': hru_result.get('final_hrus'),
                 'sub_basins': hru_result.get('sub_basins'),
@@ -342,7 +460,7 @@ class SingleOutletDelineation:
                 'watershed_area_km2': detailed_watershed_result.get('watershed_area_km2', 0)
             })
             
-            # Step 4: Generate model instructions
+            # Step 7: Generate model instructions
             model_instructions_result = self.model_instructions_step.execute({
                 'selected_model': model_structure_result.get('selected_model'),
                 'sub_basins': hru_result.get('sub_basins'),
@@ -350,7 +468,7 @@ class SingleOutletDelineation:
                 'watershed_area_km2': detailed_watershed_result.get('watershed_area_km2', 0)
             })
             
-            # Step 5: Validate complete model
+            # Step 8: Validate complete model
             final_validation_result = self.validation_final_step.execute({
                 'rvh_file': model_structure_result.get('rvh_file'),
                 'rvp_file': model_structure_result.get('rvp_file'),
@@ -359,7 +477,7 @@ class SingleOutletDelineation:
                 'rvc_file': model_instructions_result.get('rvc_file')
             })
             
-            # Step 6: Create watershed maps and visualizations (skip if mapping_step not available)
+            # Step 9: Create watershed maps and visualizations (skip if mapping_step not available)
             mapping_result = {'success': False, 'error': 'Mapping step not available'}
             if hasattr(self, 'mapping_step') and self.mapping_step:
                 mapping_result = self.mapping_step.execute(
