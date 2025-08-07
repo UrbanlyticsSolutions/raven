@@ -2,7 +2,7 @@
 
 ## Core Principles
 
-### **❌ NEVER USE:**
+### ** NEVER USE:**
 - Synthetic data
 - Mock data  
 - Placeholder data

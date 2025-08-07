@@ -353,13 +353,13 @@ class LakeClassifier:
         
         print("Classifying lakes from existing shapefiles...")
         
-        # Create mock watershed results for compatibility
-        mock_watershed_results = {'files_created': []}
+        # Create watershed results structure for compatibility
+        watershed_results = {'files_created': []}
         if streams_shapefile_path and streams_shapefile_path.exists():
-            mock_watershed_results['files_created'].append(str(streams_shapefile_path))
+            watershed_results['files_created'].append(str(streams_shapefile_path))
         
         return self.classify_lakes_from_watershed_results(
-            mock_watershed_results, 
+            watershed_results, 
             lakes_shapefile_path,
             connected_threshold_km2,
             non_connected_threshold_km2

@@ -224,11 +224,9 @@ class NetworkSimplifier:
             small_subbasins = finalriv_infoply[finalriv_infoply[self.da_colnm] < minimum_area_m2]
             large_subbasins = finalriv_infoply[finalriv_infoply[self.da_colnm] >= minimum_area_m2]
         else:
-            # Fallback: use geometry area if DrainArea column not available
-            print("   Warning: DrainArea column not found, using geometry area")
-            geometry_areas = finalriv_infoply.geometry.area
-            small_subbasins = finalriv_infoply[geometry_areas < minimum_area_m2]
-            large_subbasins = finalriv_infoply[geometry_areas >= minimum_area_m2]
+            error_msg = f"DrainArea column not found - no synthetic fallback provided"
+            print(f"   Error: {error_msg}")
+            raise ValueError(error_msg)
         
         print(f"   Found {len(small_subbasins)} subbasins below {minimum_area_km2} km² threshold")
         

@@ -191,144 +191,29 @@ class ImprovedOutletSnapper:
                 'method': 'downstream_snapping'
             }
     
-    def compare_snapping_methods(self, outlet_coords: Tuple[float, float],
-                                streams_file: str, flow_accum_file: str, flow_dir_file: str) -> Dict[str, Any]:
-        """
-        Compare multiple snapping methods and return results for all
-        
-        Returns results from:
-        1. Downstream snapping (this processor)
-        2. WhiteboxTools standard snapping (if available)
-        3. Analysis of both methods
-        """
-        
-        self.logger.info("Comparing snapping methods")
-        
-        results = {
-            'success': True,
-            'original_coords': outlet_coords,
-            'comparison_results': {}
-        }
-        
-        # Method 1: Downstream snapping
-        downstream_result = self.snap_outlet_downstream(outlet_coords, streams_file, flow_accum_file)
-        results['comparison_results']['downstream'] = downstream_result
-        
-        # Method 2: WhiteboxTools snapping (if available)
-        try:
-            import whitebox
-            wbt = whitebox.WhiteboxTools()
-            wbt.set_working_dir(str(self.workspace_dir.absolute()))
-            wbt.set_verbose_mode(False)
-            
-            # Create original outlet shapefile for WhiteboxTools
-            original_point = Point(outlet_coords)
-            original_gdf = gpd.GeoDataFrame(
-                [{'id': 1, 'type': 'original'}],
-                geometry=[original_point],
-                crs='EPSG:4326'
-            )
-            
-            wbt_original_file = self.workspace_dir / "wbt_original_outlet.shp"
-            wbt_snapped_file = self.workspace_dir / "wbt_snapped_outlet.shp"
-            
-            original_gdf.to_file(wbt_original_file)
-            
-            # Copy flow accumulation to workspace
-            import shutil
-            local_flow_accum = self.workspace_dir / "flow_accumulation.tif"
-            shutil.copy2(flow_accum_file, local_flow_accum)
-            
-            # Run WhiteboxTools snapping
-            wbt.snap_pour_points(
-                str(wbt_original_file.name),
-                str(local_flow_accum.name),
-                str(wbt_snapped_file.name),
-                50  # 50 meter snap distance
-            )
-            
-            if wbt_snapped_file.exists():
-                wbt_snapped_gdf = gpd.read_file(wbt_snapped_file)
-                if len(wbt_snapped_gdf) > 0:
-                    wbt_snapped_point = wbt_snapped_gdf.geometry.iloc[0]
-                    wbt_snap_distance = original_point.distance(wbt_snapped_point) * 111000
-                    
-                    results['comparison_results']['whitebox'] = {
-                        'success': True,
-                        'method': 'whitebox_snap_pour_points',
-                        'snapped_coords': (wbt_snapped_point.x, wbt_snapped_point.y),
-                        'snap_distance_m': wbt_snap_distance,
-                        'snapped_outlet_file': str(wbt_snapped_file)
-                    }
-                    
-                    self.logger.info(f"WhiteboxTools snapping: {wbt_snap_distance:.1f}m")
-                else:
-                    results['comparison_results']['whitebox'] = {
-                        'success': False,
-                        'error': 'WhiteboxTools produced empty result'
-                    }
-            else:
-                results['comparison_results']['whitebox'] = {
-                    'success': False,
-                    'error': 'WhiteboxTools snap_pour_points failed'
-                }
-                
-        except Exception as e:
-            results['comparison_results']['whitebox'] = {
-                'success': False,
-                'error': f'WhiteboxTools not available or failed: {str(e)}'
-            }
-        
-        # Create comparison summary
-        results['summary'] = self._create_comparison_summary(results['comparison_results'])
-        
-        return results
-    
-    def _create_comparison_summary(self, comparison_results: Dict) -> Dict[str, Any]:
-        """Create a summary comparing the different snapping methods"""
-        
-        summary = {
-            'methods_tested': len(comparison_results),
-            'successful_methods': sum(1 for r in comparison_results.values() if r.get('success', False)),
-            'recommendations': []
-        }
-        
-        # Analyze each method
-        for method_name, result in comparison_results.items():
-            if result.get('success', False):
-                snap_distance = result.get('snap_distance_m', 0)
-                
-                summary[f'{method_name}_distance'] = snap_distance
-                
-                if snap_distance < 10:
-                    summary['recommendations'].append(f"{method_name}: Excellent snap (< 10m)")
-                elif snap_distance < 100:
-                    summary['recommendations'].append(f"{method_name}: Good snap (< 100m)")
-                else:
-                    summary['recommendations'].append(f"{method_name}: Long distance snap ({snap_distance:.0f}m)")
-        
-        return summary
-
 
 if __name__ == "__main__":
     # Test the improved snapping
     snapper = ImprovedOutletSnapper("test_snapping")
     
-    # Vancouver coordinates
-    outlet_coords = (-123.1207, 49.2827)
+    # Vancouver coordinates (matching existing outlet data)
+    outlet_coords = (-123.1200, 49.2800)
     
-    # Use existing data
-    streams_file = "fixed_bc_workflow/watershed/basic_delineation/streams.geojson"
-    flow_accum_file = "fixed_bc_workflow/watershed/basic_delineation/flow_accumulation_d8.tif"
-    flow_dir_file = "fixed_bc_workflow/watershed/basic_delineation/flow_direction_d8.tif"
+    # Use existing data from data folder
+    data_dir = Path(__file__).parent.parent / "data" / "outlet_49.2800_-123.1200"
+    streams_file = str(data_dir / "streams.geojson")
+    flow_accum_file = str(data_dir / "flow_accumulation_d8.tif")
+    flow_dir_file = str(data_dir / "flow_direction_d8.tif")
     
-    # Test downstream snapping
-    result = snapper.snap_outlet_downstream(outlet_coords, streams_file, flow_accum_file)
+    # Test downstream snapping with larger search distance
+    result = snapper.snap_outlet_downstream(outlet_coords, streams_file, flow_accum_file, max_search_distance=1000)
     
     if result['success']:
         print(f"Downstream snapping successful!")
         print(f"Original: {result['original_coords']}")
         print(f"Snapped: {result['snapped_coords']}")
         print(f"Distance: {result['snap_distance_m']:.1f}m")
+        print(f"Flow accumulation: {result['flow_accumulation']:.0f}")
+        print(f"Files created: {result['files_created']}")
     else:
         print(f"Downstream snapping failed: {result['error']}")

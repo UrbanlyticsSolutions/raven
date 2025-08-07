@@ -237,9 +237,9 @@ class WatershedMapper:
                 streams_gdf.plot(ax=ax, color='blue', linewidth=1, alpha=0.8, zorder=5)
                 
         except Exception as e:
-            self.logger.warning(f"Error plotting streams: {e}")
-            # Fallback to simple plotting
-            streams_gdf.plot(ax=ax, color='blue', linewidth=1, alpha=0.8, zorder=5)
+            error_msg = f"Error plotting streams: {e} - no synthetic fallback provided"
+            self.logger.error(error_msg)
+            raise Exception(error_msg)
     
     def _plot_lakes(self, ax, lakes_file: str, connected_lakes_file: str, 
                    non_connected_lakes_file: str, legend_elements: List):

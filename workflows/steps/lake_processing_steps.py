@@ -91,32 +91,11 @@ class DetectAndClassifyLakes(WorkflowStep):
         watershed_gdf = gpd.read_file(watershed_boundary)
         watershed_geom = watershed_gdf.geometry.iloc[0]
         
-        # Create mock lakes within watershed
-        bounds = watershed_gdf.total_bounds
-        
-        lakes = []
-        
-        # Create a few mock lakes
-        for i in range(3):
-            # Random location within watershed
-            center_x = bounds[0] + (bounds[2] - bounds[0]) * (0.3 + i * 0.2)
-            center_y = bounds[1] + (bounds[3] - bounds[1]) * (0.3 + i * 0.2)
-            
-            # Create circular lake
-            radius = 0.01  # degrees
-            lake_poly = Point(center_x, center_y).buffer(radius)
-            
-            lakes.append({
-                'geometry': lake_poly,
-                'lake_id': f'LAKE_{i+1}',
-                'area_km2': lake_poly.area * 111 * 111,  # Rough conversion
-                'depth_m': 5.0 + i * 2.0  # Mock depth
-            })
-        
-        # Save lakes
-        lakes_file = workspace / "watershed_lakes.shp"
-        lakes_gdf = gpd.GeoDataFrame(lakes, crs='EPSG:4326')
-        lakes_gdf.to_file(lakes_file)
+        # Lake detection must use real data - no mock generation allowed
+        return {
+            'success': False,
+            'error': 'Real lake detection not implemented - no synthetic lake generation allowed'
+        }
         
         return lakes_file
     

@@ -98,7 +98,7 @@ class ProfessionalWatershedAnalyzer:
         if HAS_WHITEBOX:
             self.wbt = whitebox.WhiteboxTools()
             self.wbt.work_dir = str(self.work_dir)
-            self.wbt.verbose = False
+            self.wbt.verbose = True # Enable verbose output
         else:
             self.wbt = None
             
@@ -415,7 +415,7 @@ class ProfessionalWatershedAnalyzer:
             # D-infinity flow accumulation
             flow_accum = output_dir / "flow_accumulation_dinf.tif"
             print(f"   Calculating D-infinity flow accumulation...")
-            self.wbt.d_inf_flow_accumulation(str(Path(dem_path).resolve()), str(flow_accum.resolve()))
+            self.wbt.d_inf_flow_accumulation(str(flow_dir.resolve()), str(flow_accum.resolve()))
             
             if flow_accum.exists():
                 files_created['flow_accumulation'] = str(flow_accum.resolve())
@@ -537,16 +537,9 @@ class ProfessionalWatershedAnalyzer:
         self._create_outlet_point_file(outlet_coords, outlet_shp)
         files_created.append(str(outlet_shp))
         
-        # Snap outlet to stream network
-        snapped_outlet = output_dir / "outlet_snapped.shp"
-        print(f"   Snapping outlet to streams...")
-        self.wbt.snap_pour_points(
-            str(outlet_shp), 
-            flow_files['flow_accumulation'], 
-            str(snapped_outlet), 
-            self.snap_distance
-        )
-        files_created.append(str(snapped_outlet))
+        # Use outlet point directly (snapping handled at workflow level)
+        snapped_outlet = outlet_shp  # Use original outlet directly
+        print(f"   Using outlet point directly for watershed delineation...")
         
         # Delineate watershed (raster)
         watershed_raster = output_dir / "watershed.tif"
@@ -558,23 +551,32 @@ class ProfessionalWatershedAnalyzer:
         watershed_raster_path = watershed_raster.resolve()
         
         try:
+            print(f"   Running WhiteboxTools watershed tool...")
+            print(f"   Flow direction: {flow_dir_path}")
+            print(f"   Snapped outlet: {snapped_outlet_path}")
+            print(f"   Output raster: {watershed_raster_path}")
+
             self.wbt.watershed(
-                str(flow_dir_path), 
-                str(snapped_outlet_path), 
-                str(watershed_raster_path)
+                d8_pntr=str(flow_dir_path), 
+                pour_pts=str(snapped_outlet_path), 
+                output=str(watershed_raster_path)
             )
             
             if watershed_raster_path.exists():
                 files_created.append(str(watershed_raster_path))
-                print(f"   Created watershed raster: {watershed_raster_path}")
+                print(f"   SUCCESS: Created watershed raster: {watershed_raster_path}")
             else:
-                print(f"   Error: watershed raster not created")
+                print(f"   ERROR: watershed raster not created by WhiteboxTools.")
+                # Attempt to get more detailed error from WBT
+                if self.wbt.verbose:
+                    print("WhiteboxTools output:")
+                    # This part is tricky as whitebox-python doesn't directly expose stdout
+                    # but we can infer from the lack of output file.
                 return files_created
                 
         except Exception as e:
-            print(f"   Watershed delineation failed: {e}")
-            # Create a simple watershed as fallback
-            print("   Creating simple watershed as fallback...")
+            print(f"   CRITICAL ERROR: Watershed delineation failed with exception: {e}")
+            return []  # Return empty list on failure
             
         # Convert to vector formats
         if 'geojson' in output_formats or 'shapefile' in output_formats:
@@ -601,8 +603,7 @@ class ProfessionalWatershedAnalyzer:
                         print(f"   Error: watershed vector not created")
                 except Exception as e:
                     print(f"   Vector conversion failed: {e}")
-                    # Create a simple polygon as fallback
-                    print("   Creating simple watershed polygon...")
+                    return files_created
         
         return files_created
     
@@ -1003,26 +1004,10 @@ class ProfessionalWatershedAnalyzer:
             except Exception as e:
                 print(f"   TopologicalBreachBurn failed: {e}")
                 
-            # Method 2: Fallback to FillBurn (classic method)
-            print(f"   Falling back to FillBurn method...")
-            self.wbt.fill_burn(
-                str(existing_streams),
-                dem_path,
-                str(burned_dem),
-                burn_distance
-            )
-            
-            if burned_dem.exists():
-                files_created['burned_dem'] = str(burned_dem)
-                print(f"   Stream burning completed with FillBurn")
-                return files_created
-                
-            # Method 3: Manual burning with rasterio/geopandas fallback
-            print(f"   Attempting manual stream burning...")
-            manual_files = self._manual_stream_burning(
-                dem_path, str(existing_streams), output_dir, burn_distance
-            )
-            files_created.update(manual_files)
+            # TopologicalBreachBurn failed - no synthetic fallback provided
+            error_msg = "Stream burning failed - no synthetic fallback provided"
+            print(f"   Error: {error_msg}")
+            raise Exception(error_msg)
             
         except Exception as e:
             print(f"   Stream burning failed: {e}")
@@ -1031,7 +1016,8 @@ class ProfessionalWatershedAnalyzer:
     
     def _manual_stream_burning(self, dem_path: str, existing_streams: str,
                            output_dir: Path, burn_distance: float) -> Dict:
-        """Manual stream burning using rasterio and geopandas fallback"""
+        """Manual stream burning - REMOVED"""
+        raise Exception("Manual stream burning removed - no fallback methods")
         files_created = {}
         
         try:

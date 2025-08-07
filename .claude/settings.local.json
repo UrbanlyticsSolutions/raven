@@ -4,7 +4,12 @@
       "Bash(python:*)",
       "Bash(ls:*)",
       "Bash(git checkout:*)",
-      "Bash(git restore:*)"
+      "Bash(git restore:*)",
+      "Bash(python:*)",
+      "Bash(timeout 60 python:*)",
+      "WebFetch(domain:sis.agr.gc.ca)",
+      "Bash(ls:*)",
+      "Bash(mkdir:*)"
     ],
     "deny": []
   }

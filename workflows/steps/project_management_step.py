@@ -199,14 +199,8 @@ class ProjectManagementStep(WorkflowStep):
         try:
             filename = pattern.format(**filename_parts)
         except KeyError as e:
-            # Fallback naming if pattern doesn't match
-            base_name = f"{self.project_name}_{file_type}"
-            if station_id:
-                base_name += f"_{station_id}"
-            if component:
-                base_name += f"_{component}"
-            base_name += f"_{self.timestamp}"
-            filename = f"{base_name}.{extension or 'dat'}"
+            error_msg = f"Filename pattern error: {e}"
+            raise ValueError(error_msg)
         
         return filename
     

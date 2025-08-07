@@ -374,14 +374,14 @@ class ComprehensiveLakeDetector:
         """Classify detected lakes using the LakeClassifier"""
         
         try:
-            # Create mock watershed results for compatibility
-            mock_watershed_results = {'files_created': []}
+            # Create watershed results structure for compatibility
+            watershed_results = {'files_created': []}
             if streams_shapefile and streams_shapefile.exists():
-                mock_watershed_results['files_created'].append(str(streams_shapefile))
+                watershed_results['files_created'].append(str(streams_shapefile))
             
             # Use LakeClassifier
             classification_results = self.classifier.classify_lakes_from_watershed_results(
-                mock_watershed_results,
+                watershed_results,
                 Path(lakes_shapefile),
                 connected_threshold,
                 non_connected_threshold

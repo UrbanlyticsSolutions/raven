@@ -78,6 +78,10 @@ class SingleOutletDelineation:
         self.validation_final_step = ValidateCompleteModel()
         # Note: mapping_step not available yet
         
+        # Initialize lake detector
+        from processors.lake_detection import ComprehensiveLakeDetector
+        self.lake_detector = ComprehensiveLakeDetector(workspace_dir=str(self.data_dir))
+        
         # Setup logging
         self.logger = self._setup_logging()
         
@@ -124,9 +128,18 @@ class SingleOutletDelineation:
             )
             
             if watershed_result['success']:
-                # Extract bbox from result
-                watershed_bbox = watershed_result.get('bbox', None)
-                if watershed_bbox:
+                # Calculate bbox from watershed_geojson
+                watershed_geojson = watershed_result.get('watershed_geojson')
+                if watershed_geojson and 'features' in watershed_geojson and watershed_geojson['features']:
+                    # Extract coordinates from first feature
+                    feature = watershed_geojson['features'][0]
+                    coords = feature['geometry']['coordinates'][0]  # Get exterior ring
+                    
+                    # Calculate bbox from coordinates
+                    lons = [coord[0] for coord in coords]
+                    lats = [coord[1] for coord in coords]
+                    watershed_bbox = (min(lons), min(lats), max(lons), max(lats))
+                    
                     # Apply buffer
                     lat_buffer = buffer_km / 111.0
                     lon_buffer = buffer_km / (111.0 * abs(math.cos(math.radians(lat))))
@@ -140,7 +153,7 @@ class SingleOutletDelineation:
                     
                     return {
                         'success': True,
-                        'watershed_boundary': watershed_result.get('watershed_geometry'),
+                        'watershed_boundary': watershed_geojson,
                         'original_bbox': watershed_bbox,
                         'buffered_bbox': buffered_bbox,
                         'source': 'mghydro_hydrosheds'
@@ -148,21 +161,10 @@ class SingleOutletDelineation:
         except Exception as e:
             self.logger.warning(f"MGHydro watershed fetch failed: {e}")
         
-        # Fallback to point-based bbox
-        lat_buffer = buffer_km / 111.0
-        lon_buffer = buffer_km / (111.0 * abs(math.cos(math.radians(lat))))
-        
-        fallback_bbox = (
-            lon - lon_buffer,
-            lat - lat_buffer,
-            lon + lon_buffer,
-            lat + lat_buffer
-        )
-        
+        # MGHydro watershed fetch failed - return error
         return {
-            'success': True,
-            'buffered_bbox': fallback_bbox,
-            'source': 'point_buffer'
+            'success': False,
+            'error': 'MGHydro watershed fetch failed - no synthetic fallback provided'
         }
     
     def calculate_single_extent(self, latitude: float, longitude: float, 
@@ -193,21 +195,10 @@ class SingleOutletDelineation:
                 'source': extent['source']
             }
         else:
-            # Fallback to point-based extent
-            lat_buffer = buffer_km / 111.0
-            lon_buffer = buffer_km / (111.0 * abs(math.cos(math.radians(latitude))))
-            
-            fallback_bbox = (
-                longitude - lon_buffer,
-                latitude - lat_buffer,
-                longitude + lon_buffer,
-                latitude + lat_buffer
-            )
-            
+            # No valid extent obtained - return error
             return {
-                'success': True,
-                'bbox': fallback_bbox,
-                'source': 'point_buffer'
+                'success': False,
+                'error': 'No valid watershed extent obtained - no synthetic fallback provided'
             }
     
     def prepare_datasets(self, latitude: float, longitude: float,
@@ -278,6 +269,7 @@ class SingleOutletDelineation:
     def delineate_single_outlet(self, outlet_lat: float, outlet_lon: float,
                               datasets: Dict[str, str],
                               outlet_name: str = None,
+                              extent_info: Dict = None,
                               **kwargs) -> Dict[str, Any]:
         """
         Delineate watershed for single outlet using datasets
@@ -327,11 +319,21 @@ class SingleOutletDelineation:
             
             # Step 2: Lake detection
             self.logger.info("Detecting lakes within watershed...")
-            lake_detection_result = self.lake_detector.detect_lakes_in_watershed(
-                dem_file=datasets['dem_file'],
-                watershed_boundary=detailed_watershed_result.get('watershed_boundary'),
-                output_dir=outlet_workspace / 'lakes',
-                min_lake_area_km2=0.01  # 1 hectare minimum
+            # Get watershed boundary geometry for bbox
+            import geopandas as gpd
+            watershed_file = detailed_watershed_result.get('watershed_boundary')
+            if not watershed_file:
+                return {
+                    'success': False,
+                    'error': 'No watershed file available for lake detection - cannot proceed without watershed boundary'
+                }
+            
+            watershed_gdf = gpd.read_file(watershed_file)
+            watershed_bounds = watershed_gdf.total_bounds.tolist()  # [minx, miny, maxx, maxy]
+            
+            lake_detection_result = self.lake_detector.detect_and_classify_lakes(
+                bbox=watershed_bounds,
+                min_lake_area_m2=10000  # 1 hectare minimum
             )
             
             if not lake_detection_result['success']:
@@ -566,12 +568,13 @@ class SingleOutletDelineation:
             if 'extent_info' in datasets_prep:
                 self.logger.info(f"Using extent from: {datasets_prep['extent_info'].get('source', 'unknown')}")
             
-            # Process single outlet
+            # Process single outlet with extent info
             result = self.delineate_single_outlet(
                 outlet_lat=latitude,
                 outlet_lon=longitude,
                 datasets=datasets_prep['datasets'],
                 outlet_name=outlet_name,
+                extent_info=datasets_prep.get('extent_info', {}),
                 **kwargs
             )
             

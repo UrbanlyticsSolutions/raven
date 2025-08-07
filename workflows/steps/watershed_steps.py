@@ -39,6 +39,7 @@ class DelineateWatershedAndStreams(WorkflowStep):
             step_category="watershed",
             description="Trace watershed boundary and extract stream network from DEM"
         )
+        self.analyzer = ProfessionalWatershedAnalyzer()
     
     def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
         self._log_step_start()
@@ -78,8 +79,8 @@ class DelineateWatershedAndStreams(WorkflowStep):
                 'watershed_area_km2': stats['area_km2'],
                 'stream_length_km': stats['stream_length_km'],
                 'max_stream_order': stats['max_stream_order'],
-                'outlet_snapped': True,
-                'snap_distance_m': 45.0,  # Mock value
+                'outlet_snapped': False,
+                'snap_distance_m': None,
                 'success': True
             }
             
@@ -95,68 +96,32 @@ class DelineateWatershedAndStreams(WorkflowStep):
                            outlet_lon: float, workspace: Path) -> Path:
         """Delineate watershed boundary from outlet point"""
         
-        # This is a simplified mock implementation
-        # In practice, this would use WhiteboxTools or similar
+        results = self.analyzer.analyze_watershed_complete(
+            dem_path=flow_direction,
+            outlet_coords=(outlet_lat, outlet_lon),
+            output_dir=workspace
+        )
+
+        if not results.get('success'):
+            raise Exception(f"Watershed delineation failed: {results.get('error')}")
+
+        for f in results.get('files_created', []):
+            if 'watershed.geojson' in f:
+                return Path(f)
         
-        watershed_file = workspace / "watershed_boundary.shp"
-        
-        # Create mock watershed polygon
-        import geopandas as gpd
-        from shapely.geometry import Polygon
-        
-        # Create a simple polygon around the outlet
-        buffer = 0.1  # degrees
-        coords = [
-            (outlet_lon - buffer, outlet_lat - buffer),
-            (outlet_lon + buffer, outlet_lat - buffer),
-            (outlet_lon + buffer, outlet_lat + buffer),
-            (outlet_lon - buffer, outlet_lat + buffer),
-            (outlet_lon - buffer, outlet_lat - buffer)
-        ]
-        
-        watershed_poly = Polygon(coords)
-        watershed_gdf = gpd.GeoDataFrame([{'geometry': watershed_poly}], crs='EPSG:4326')
-        watershed_gdf.to_file(watershed_file)
-        
-        return watershed_file
+        raise FileNotFoundError("Could not find watershed geojson in analysis results.")
     
     def _extract_stream_network(self, flow_accumulation: Path, 
                               watershed_boundary: Path, workspace: Path) -> Path:
         """Extract stream network from flow accumulation"""
         
-        # This is a simplified mock implementation
-        
-        stream_file = workspace / "stream_network.shp"
-        
-        # Create mock stream network
-        import geopandas as gpd
-        from shapely.geometry import LineString
-        
-        # Load watershed boundary
-        watershed_gdf = gpd.read_file(watershed_boundary)
-        bounds = watershed_gdf.total_bounds
-        
-        # Create simple stream lines
-        streams = []
-        
-        # Main stream
-        main_stream = LineString([
-            (bounds[0] + 0.02, bounds[1] + 0.02),
-            (bounds[2] - 0.02, bounds[3] - 0.02)
-        ])
-        streams.append({'geometry': main_stream, 'stream_order': 3})
-        
-        # Tributary
-        tributary = LineString([
-            (bounds[0] + 0.05, bounds[3] - 0.02),
-            (bounds[0] + 0.07, bounds[1] + 0.05)
-        ])
-        streams.append({'geometry': tributary, 'stream_order': 1})
-        
-        stream_gdf = gpd.GeoDataFrame(streams, crs='EPSG:4326')
-        stream_gdf.to_file(stream_file)
-        
-        return stream_file
+        # This is a bit of a hack. The analyzer already created the streams.
+        # We are just looking for the file.
+        for f in workspace.glob('**/*'):
+            if 'streams.geojson' in f.name:
+                return f
+
+        raise FileNotFoundError("Could not find stream geojson in analysis results.")
     
     def _calculate_watershed_stats(self, watershed_boundary: Path, 
                                  stream_network: Path) -> Dict[str, float]:

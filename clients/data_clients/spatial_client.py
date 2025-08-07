@@ -114,18 +114,7 @@ def get_legacy_wcs_data(endpoint, identifier, bbox, output_path, version="1.1.1"
                 "GRIDTYPE": "urn:ogc:def:method:WCS:1.1:2dSimpleGrid",
                 "GRIDOFFSETS": grid_offsets,
             },
-            # Simplified request without specific grid parameters (fallback)
-            {
-                "SERVICE": "WCS",
-                "VERSION": version,
-                "REQUEST": "GetCoverage",
-                "FORMAT": format,
-                "IDENTIFIER": identifier,
-                "BOUNDINGBOX": f"{minx},{miny},{maxx},{maxy},urn:ogc:def:crs:EPSG::{crs.split(':')[-1]}",
-                "GRIDBASECRS": f"urn:ogc:def:crs:EPSG::{crs.split(':')[-1]}",
-                "GRIDCS": "urn:ogc:def:cs:OGC::imageCRS",
-                "GRIDTYPE": "urn:ogc:def:method:WCS:1.1:2dSimpleGrid",
-            }
+            # REMOVED: Simplified fallback request - no fallback parameter sets allowed
         ]
         
         for params in param_sets:
@@ -342,15 +331,8 @@ class SpatialLayersClient:
             success = self._get_nrcan_landcover(bbox, output_path, identifier)
             
             if not success:
-                # Fallback to legacy WCS with original coordinates
-                success = get_legacy_wcs_data(
-                    endpoint=self.endpoints['nrcan_legacy_landcover'],
-                    identifier=identifier,
-                    bbox=bbox,
-                    output_path=output_path,
-                    grid_offsets=grid_offsets,
-                    crs="EPSG:4326"
-                )
+                error_msg = "NRCan landcover data acquisition failed - no synthetic fallback provided"
+                raise Exception(error_msg)
             
             if success:
                 print(f"SUCCESS: Land cover data downloaded")
@@ -731,7 +713,7 @@ class SpatialLayersClient:
         return self.get_gauge_data_from_geopackage(gpkg_path, outlet_lat, outlet_lng, max_distance_km=5.0)
     
     def get_outlet_driven_watershed(self, outlet_lat: float, outlet_lng: float, 
-                                  use_gauge_fallback: bool = True, 
+                                  use_gauge_fallback: bool = False, 
                                   gpkg_path: Optional[Path] = None) -> Dict:
         """
         Complete outlet-driven watershed discovery combining MGHydro API and gauge data
@@ -739,7 +721,7 @@ class SpatialLayersClient:
         Args:
             outlet_lat: Outlet latitude
             outlet_lng: Outlet longitude
-            use_gauge_fallback: Use nearest gauge as fallback if no exact match
+            use_gauge_fallback: DEPRECATED - no longer used (no synthetic fallbacks)
             gpkg_path: Path to GeoPackage file
             
         Returns:
@@ -752,8 +734,8 @@ class SpatialLayersClient:
             'gauge_info': {}
         }
         
-        # Validate outlet with gauge data
-        if use_gauge_fallback and gpkg_path:
+        # Get gauge data for reference only (no fallback)
+        if gpkg_path:
             gauge_validation = self.validate_outlet_with_gauge_data(outlet_lat, outlet_lng, gpkg_path)
             results['validation'] = gauge_validation
             

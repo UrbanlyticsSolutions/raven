@@ -365,14 +365,9 @@ class HRUGenerator:
                         'max': float(np.max(masked_elevation))
                     }
         except Exception as e:
-            print(f"Warning: Could not extract elevation statistics: {e}")
-        
-        # Fallback to defaults
-        return {
-            'mean': 500.0,
-            'min': 450.0,
-            'max': 550.0
-        }
+            error_msg = f"Could not extract elevation statistics: {e} - no synthetic fallback provided"
+            print(f"Error: {error_msg}")
+            raise ValueError(error_msg)
     
     def _landuse_to_vegetation(self, landuse_class: str) -> str:
         """Map land use class to vegetation class"""

@@ -148,9 +148,8 @@ class ValidateCoordinatesAndFindRoutingProduct(WorkflowStep):
         # First try geopackage
         gpkg_file = product_path / 'canadian_hydro.gpkg'
         if gpkg_file.exists():
-            # For now, return a mock subbasin ID - in real implementation would query the geopackage
-            # This is sufficient for testing the workflow structure
-            return 1
+            # Real geopackage querying not implemented
+            raise Exception('Geopackage subbasin querying not implemented - no mock subbasin IDs allowed')
         
         # Look for catchment file
         catchment_files = list(product_path.glob("*catchment*.shp"))
@@ -500,8 +499,13 @@ class ValidateCompleteModel(WorkflowStep):
         workspace_dir = model_files['rvh_file'].parent
         
         # Try to extract outlet coordinates and other metadata from context
-        outlet_coordinates = getattr(self, '_outlet_coordinates', [45.5017, -73.5673])  # Default fallback
-        approach_used = getattr(self, '_approach_used', 'A')  # Default fallback
+        outlet_coordinates = getattr(self, '_outlet_coordinates', None)
+        approach_used = getattr(self, '_approach_used', None)
+        
+        if outlet_coordinates is None:
+            raise Exception('Outlet coordinates not provided - no default fallback coordinates allowed')
+        if approach_used is None:
+            raise Exception('Approach not specified - no default fallback approach allowed')
         execution_start_time = getattr(self, '_execution_start_time', datetime.now())
         execution_time_seconds = (datetime.now() - execution_start_time).total_seconds()
         

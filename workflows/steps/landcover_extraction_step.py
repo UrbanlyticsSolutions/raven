@@ -21,7 +21,7 @@ from clients.data_clients.spatial_client import SpatialLayersClient
 class LandcoverExtractionStep:
     """
     Landcover extraction step that gets landcover data for a specified extent.
-    Uses SpatialLayersClient and creates synthetic data as fallback.
+    Uses SpatialLayersClient with NO FALLBACKS - real data required.
     """
     
     def __init__(self, workspace_dir: Path = None):
@@ -99,7 +99,7 @@ class LandcoverExtractionStep:
                 self.logger.info("Successfully obtained real landcover data")
                 return real_data_result
             else:
-                error_msg = f"Real landcover data unavailable: {real_data_result.get('error', 'Unknown error')} - No synthetic fallback provided"
+                error_msg = f"Real landcover data unavailable: {real_data_result.get('error', 'Unknown error')}"
                 self.logger.error(error_msg)
                 return {
                     'success': False,
@@ -121,12 +121,30 @@ class LandcoverExtractionStep:
         """Try to get real landcover data from spatial client"""
         
         try:
-            # This would be implemented when real landcover client methods are available
-            # For now, return failure to trigger synthetic data creation
-            return {
-                'success': False,
-                'error': 'Real landcover data client not yet implemented'
-            }
+            from clients.data_clients.spatial_client import SpatialLayersClient
+            
+            # Initialize spatial client
+            spatial_client = SpatialLayersClient()
+            
+            # Download real landcover data using NRCan
+            result = spatial_client.get_landcover_for_watershed(
+                bbox=bounds,
+                output_path=output_file,
+                year=2020  # Use most recent available
+            )
+            
+            if result.get('success', False) and output_file.exists():
+                return {
+                    'success': True,
+                    'landcover_file': str(output_file),
+                    'source': result.get('source', 'nrcan'),
+                    'year': 2020
+                }
+            else:
+                return {
+                    'success': False,
+                    'error': result.get('error', 'Landcover download failed')
+                }
             
         except Exception as e:
             return {
@@ -134,79 +152,8 @@ class LandcoverExtractionStep:
                 'error': f"Real landcover data acquisition failed: {str(e)}"
             }
     
-    def _create_synthetic_landcover(self, bounds: Tuple[float, float, float, float], 
-                                   output_file: Path) -> Dict[str, Any]:
-        """Create synthetic landcover data as fallback"""
-        
-        try:
-            # Create landcover raster
-            width, height = 1000, 1000  # High resolution synthetic data
-            transform = from_bounds(*bounds, width, height)
-            
-            # Create realistic landcover pattern
-            landcover_data = self._generate_realistic_landcover_pattern(width, height, bounds)
-            
-            # Save landcover raster
-            profile = {
-                'driver': 'GTiff',
-                'height': height,
-                'width': width,
-                'count': 1,
-                'dtype': rasterio.uint8,
-                'crs': 'EPSG:4326',
-                'transform': transform,
-                'nodata': 0,
-                'compress': 'lzw'
-            }
-            
-            with rasterio.open(output_file, 'w', **profile) as dst:
-                dst.write(landcover_data, 1)
-            
-            # Calculate class statistics
-            unique_classes, counts = np.unique(landcover_data[landcover_data > 0], return_counts=True)
-            total_pixels = counts.sum()
-            
-            class_percentages = {}
-            for class_code, count in zip(unique_classes, counts):
-                percentage = (count / total_pixels) * 100
-                # Find class name
-                class_name = 'UNKNOWN'
-                for name, info in self.raven_landcover_classes.items():
-                    if info['code'] == class_code:
-                        class_name = name
-                        break
-                class_percentages[class_name] = round(percentage, 1)
-            
-            # Calculate file size
-            file_size_mb = output_file.stat().st_size / (1024 * 1024)
-            
-            results = {
-                'success': True,
-                'step_type': 'landcover_extraction',
-                'landcover_file': str(output_file),
-                'bounds': bounds,
-                'source': 'Synthetic',
-                'data_type': 'synthetic_realistic',
-                'resolution_pixels': f"{width}x{height}",
-                'file_size_mb': round(file_size_mb, 2),
-                'raven_classes': self.raven_landcover_classes,
-                'class_distribution': class_percentages,
-                'workspace': str(self.workspace_dir),
-                'files_created': [str(output_file)]
-            }
-            
-            self.logger.info(f"Synthetic landcover data created successfully")
-            self.logger.info(f"Output file: {output_file}")
-            self.logger.info(f"Class distribution: {class_percentages}")
-            
-            return results
-            
-        except Exception as e:
-            return {
-                'success': False,
-                'error': f"Synthetic landcover creation failed: {str(e)}",
-                'step_type': 'landcover_extraction'
-            }
+    # REMOVED: _create_synthetic_landcover - NO FALLBACKS ALLOWED
+    # All landcover data must come from real sources via SpatialLayersClient
     
     def _generate_realistic_landcover_pattern(self, width: int, height: int, 
                                             bounds: Tuple[float, float, float, float]) -> np.ndarray:

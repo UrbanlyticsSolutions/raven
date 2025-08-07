@@ -377,9 +377,9 @@ class PolygonOverlayProcessor:
             return union_result
             
         except Exception as e:
-            print(f"Warning: Union operation failed: {e}")
-            # Fallback: simple concatenation
-            return pd.concat([gdf1, gdf2], ignore_index=True)
+            error_msg = f"Union operation failed: {e} - no synthetic fallback provided"
+            print(f"Error: {error_msg}")
+            raise Exception(error_msg)
     
     def _fix_geometries(self, gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
         """

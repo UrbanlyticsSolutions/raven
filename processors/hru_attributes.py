@@ -200,16 +200,9 @@ class HRUAttributesCalculator:
                 print(f"     Loaded {len(subbasins_gdf)} integrated catchments")
                 return subbasins_gdf
         
-        # Fallback to watershed results
-        watershed_files = [f for f in watershed_results.get('files_created', []) 
-                          if 'watershed.geojson' in f]
-        if watershed_files:
-            subbasins_gdf = gpd.read_file(watershed_files[0])
-            # Add required columns if missing
-            if 'SubId' not in subbasins_gdf.columns:
-                subbasins_gdf['SubId'] = range(1, len(subbasins_gdf) + 1)
-            if 'HyLakeId' not in subbasins_gdf.columns:
-                subbasins_gdf['HyLakeId'] = 0  # No lakes
+        # No integrated catchments found - fail
+        error_msg = "No integrated catchments found - no synthetic fallback provided"
+        raise ValueError(error_msg)
             print(f"     Loaded {len(subbasins_gdf)} watershed catchments")
             return subbasins_gdf
         

@@ -111,7 +111,7 @@ class SoilExtractionStep:
     def execute(self, bounds: Tuple[float, float, float, float], 
                 output_filename: str = "soil.tif") -> Dict[str, Any]:
         """
-        Execute soil extraction for specified bounds
+        Execute soil extraction for specified bounds using SoilGrids API
         
         Parameters:
         -----------
@@ -123,24 +123,24 @@ class SoilExtractionStep:
         Returns:
         --------
         Dict[str, Any]
-            Soil extraction results
+            Soil extraction results from SoilGrids API
         """
         
-        self.logger.info(f"Starting soil extraction for bounds: {bounds}")
+        self.logger.info(f"Starting SoilGrids soil extraction for bounds: {bounds}")
         
         try:
             # Prepare output path
             soil_file = self.workspace_dir / output_filename
             
-            # Try to get real soil data first
-            self.logger.info("Attempting to get real soil data")
-            real_data_result = self._try_get_real_soil_data(bounds, soil_file)
+            # Get real soil data from SoilGrids API
+            self.logger.info("Getting soil data from SoilGrids API")
+            soil_result = self._get_soilgrids_data(bounds, soil_file)
             
-            if real_data_result['success']:
-                self.logger.info("Successfully obtained real soil data")
-                return real_data_result
+            if soil_result['success']:
+                self.logger.info("Successfully obtained SoilGrids soil data")
+                return soil_result
             else:
-                error_msg = f"Real soil data unavailable: {real_data_result.get('error', 'Unknown error')} - No synthetic fallback provided"
+                error_msg = f"SoilGrids API failed: {soil_result.get('error', 'Unknown error')}"
                 self.logger.error(error_msg)
                 return {
                     'success': False,
@@ -157,195 +157,65 @@ class SoilExtractionStep:
                 'step_type': 'soil_extraction'
             }
     
-    def _try_get_real_soil_data(self, bounds: Tuple[float, float, float, float], 
-                               output_file: Path) -> Dict[str, Any]:
-        """Try to get real soil data from spatial client"""
+    def _get_soilgrids_data(self, bounds: Tuple[float, float, float, float], 
+                           output_file: Path) -> Dict[str, Any]:
+        """Get real soil data from SoilGrids WCS service"""
         
         try:
-            # This would be implemented when real soil data client methods are available
-            # For now, return failure to trigger synthetic data creation
-            return {
-                'success': False,
-                'error': 'Real soil data client not yet implemented'
-            }
+            from clients.data_clients.soil_client import SoilDataClient
+            
+            # Initialize soil client with output directory
+            soil_client = SoilDataClient(output_dir=str(output_file.parent))
+            
+            # Get all soil texture rasters (clay, sand, silt) for the bounding box
+            print(f"Downloading soil texture data for bounds: {bounds}")
+            raster_results = soil_client.get_soil_texture_rasters_for_bbox(
+                bbox=bounds,
+                depth='0-5cm',  # Top soil layer
+                width=256,      # Good resolution for watershed modeling
+                height=256
+            )
+            
+            # Check if we got at least one successful raster download
+            successful_downloads = [path for path in raster_results.values() if path is not None]
+            
+            if successful_downloads:
+                # Use the clay raster as the primary output file (rename if needed)
+                if raster_results.get('clay'):
+                    primary_file = Path(raster_results['clay'])
+                    if primary_file != output_file:
+                        primary_file.rename(output_file)
+                else:
+                    # Use the first available raster
+                    primary_file = Path(successful_downloads[0])
+                    primary_file.rename(output_file)
+                
+                return {
+                    'success': True,
+                    'soil_file': str(output_file),
+                    'source': 'SoilGrids v2.0 WCS Service',
+                    'texture_files': {
+                        prop: path for prop, path in raster_results.items() 
+                        if path is not None
+                    },
+                    'successful_downloads': len(successful_downloads),
+                    'total_requested': len(raster_results),
+                    'step_type': 'soil_extraction'
+                }
+            else:
+                return {
+                    'success': False,
+                    'error': 'No soil texture rasters could be downloaded from SoilGrids WCS',
+                    'step_type': 'soil_extraction'
+                }
             
         except Exception as e:
             return {
                 'success': False,
-                'error': f"Real soil data acquisition failed: {str(e)}"
-            }
-    
-    def _create_synthetic_soil_data(self, bounds: Tuple[float, float, float, float], 
-                                   output_file: Path) -> Dict[str, Any]:
-        """Create synthetic soil data as fallback"""
-        
-        try:
-            # Create soil raster
-            width, height = 1000, 1000  # High resolution synthetic data
-            transform = from_bounds(*bounds, width, height)
-            
-            # Create realistic soil pattern
-            soil_data = self._generate_realistic_soil_pattern(width, height, bounds)
-            
-            # Save soil raster
-            profile = {
-                'driver': 'GTiff',
-                'height': height,
-                'width': width,
-                'count': 1,
-                'dtype': rasterio.uint8,
-                'crs': 'EPSG:4326',
-                'transform': transform,
-                'nodata': 0,
-                'compress': 'lzw'
-            }
-            
-            with rasterio.open(output_file, 'w', **profile) as dst:
-                dst.write(soil_data, 1)
-            
-            # Calculate class statistics
-            unique_classes, counts = np.unique(soil_data[soil_data > 0], return_counts=True)
-            total_pixels = counts.sum()
-            
-            class_percentages = {}
-            average_properties = {
-                'hydraulic_conductivity': 0.0,
-                'porosity': 0.0,
-                'field_capacity': 0.0,
-                'wilting_point': 0.0,
-                'bulk_density': 0.0
-            }
-            
-            for class_code, count in zip(unique_classes, counts):
-                percentage = (count / total_pixels) * 100
-                weight = percentage / 100.0
-                
-                # Find class name and properties
-                class_name = 'UNKNOWN'
-                for name, info in self.raven_soil_classes.items():
-                    if info['code'] == class_code:
-                        class_name = name
-                        # Add weighted contribution to average properties
-                        for prop, value in info.items():
-                            if prop != 'code' and prop in average_properties:
-                                average_properties[prop] += value * weight
-                        break
-                
-                class_percentages[class_name] = round(percentage, 1)
-            
-            # Round average properties
-            for prop in average_properties:
-                average_properties[prop] = round(average_properties[prop], 3)
-            
-            # Calculate file size
-            file_size_mb = output_file.stat().st_size / (1024 * 1024)
-            
-            results = {
-                'success': True,
-                'step_type': 'soil_extraction',
-                'soil_file': str(output_file),
-                'bounds': bounds,
-                'source': 'Synthetic',
-                'data_type': 'synthetic_realistic',
-                'resolution_pixels': f"{width}x{height}",
-                'file_size_mb': round(file_size_mb, 2),
-                'raven_soil_classes': self.raven_soil_classes,
-                'class_distribution': class_percentages,
-                'average_properties': average_properties,
-                'workspace': str(self.workspace_dir),
-                'files_created': [str(output_file)]
-            }
-            
-            self.logger.info(f"Synthetic soil data created successfully")
-            self.logger.info(f"Output file: {output_file}")
-            self.logger.info(f"Class distribution: {class_percentages}")
-            self.logger.info(f"Average hydraulic conductivity: {average_properties['hydraulic_conductivity']:.1f} mm/hr")
-            
-            return results
-            
-        except Exception as e:
-            return {
-                'success': False,
-                'error': f"Synthetic soil data creation failed: {str(e)}",
+                'error': f"SoilGrids WCS data acquisition failed: {str(e)}",
                 'step_type': 'soil_extraction'
             }
     
-    def _generate_realistic_soil_pattern(self, width: int, height: int, 
-                                       bounds: Tuple[float, float, float, float]) -> np.ndarray:
-        """Generate realistic soil pattern based on geographic and topographic context"""
-        
-        # Initialize with loam as default (most common agricultural soil)
-        soil = np.full((height, width), self.raven_soil_classes['LOAM']['code'], dtype=np.uint8)
-        
-        # Create random seed based on bounds for reproducible patterns
-        seed = int(abs(bounds[0] * 1000) + abs(bounds[1] * 1000)) % 2**32
-        np.random.seed(seed)
-        
-        # Create elevation-like gradient for soil distribution
-        y_coords, x_coords = np.mgrid[0:height, 0:width]
-        
-        # Simulate elevation gradient (higher = sandier, lower = clayier)
-        elevation_gradient = (y_coords / height + x_coords / width) / 2
-        elevation_noise = np.random.random((height, width)) * 0.3
-        elevation_sim = elevation_gradient + elevation_noise
-        
-        # Higher elevations - more sandy soils (better drainage)
-        high_elevation_mask = elevation_sim > 0.7
-        sandy_areas = high_elevation_mask & (np.random.random((height, width)) < 0.6)
-        soil[sandy_areas] = self.raven_soil_classes['SAND']['code']
-        
-        # Some sandy loam in moderately high areas
-        mid_high_mask = (elevation_sim > 0.5) & (elevation_sim <= 0.7)
-        sandy_loam_areas = mid_high_mask & (np.random.random((height, width)) < 0.4)
-        soil[sandy_loam_areas] = self.raven_soil_classes['SANDY_LOAM']['code']
-        
-        # Lower elevations - more clay soils (poor drainage)
-        low_elevation_mask = elevation_sim < 0.3
-        clay_areas = low_elevation_mask & (np.random.random((height, width)) < 0.5)
-        soil[clay_areas] = self.raven_soil_classes['CLAY']['code']
-        
-        # Some clay loam in moderately low areas
-        mid_low_mask = (elevation_sim >= 0.3) & (elevation_sim <= 0.5)
-        clay_loam_areas = mid_low_mask & (np.random.random((height, width)) < 0.3)
-        soil[clay_loam_areas] = self.raven_soil_classes['CLAY_LOAM']['code']
-        
-        # Add some silt areas near water-like features
-        # Create meandering patterns that might represent old river deposits
-        for i in range(2):  # 2 silt deposit areas
-            center_y = np.random.randint(height // 4, 3 * height // 4)
-            center_x = np.random.randint(width // 4, 3 * width // 4)
-            
-            # Create elongated silt deposits
-            for j in range(50):
-                y_offset = int(np.random.normal(0, height // 8))
-                x_offset = int(np.random.normal(0, width // 20))  # More elongated
-                
-                y = np.clip(center_y + y_offset, 0, height - 1)
-                x = np.clip(center_x + x_offset, 0, width - 1)
-                
-                # Create small silt patches
-                for dy in range(-3, 4):
-                    for dx in range(-3, 4):
-                        ny, nx = y + dy, x + dx
-                        if (0 <= ny < height and 0 <= nx < width and 
-                            np.random.random() < 0.7):
-                            soil[ny, nx] = self.raven_soil_classes['SILT']['code']
-        
-        # Add some spatial clustering to make patterns more realistic
-        # Apply a smoothing filter to create more natural transitions
-        from scipy import ndimage
-        try:
-            # Apply median filter to smooth transitions
-            soil_smoothed = ndimage.median_filter(soil, size=3)
-            
-            # Only apply smoothing where it makes sense (not too aggressive)
-            smooth_mask = np.random.random((height, width)) < 0.3
-            soil[smooth_mask] = soil_smoothed[smooth_mask]
-        except ImportError:
-            # If scipy not available, skip smoothing
-            pass
-        
-        return soil
 
 
 if __name__ == "__main__":

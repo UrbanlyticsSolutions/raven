@@ -254,24 +254,81 @@ class HydroShedsAdapter:
             basinmaker_rivers['HYBAS_L12'] = basinmaker_rivers['HYBAS_L12']
         basinmaker_rivers['Strahler'] = basinmaker_rivers['ORD_STRA']
         
-        # Add estimated attributes (would be calculated properly in full implementation)
-        basinmaker_rivers['RivSlope'] = 0.001  # Default slope
+        # Validate required HydroRIVERS attributes are present
+        required_cols = ['LENGTH_KM', 'CATCH_SKM', 'DIS_AV_CMS', 'ORD_STRA']
+        missing_cols = [col for col in required_cols if col not in basinmaker_rivers.columns]
+        if missing_cols:
+            raise ValueError(f"Missing required HydroRIVERS columns: {missing_cols} - cannot proceed without real data")
+        
+        # Check for missing data in critical columns
+        if basinmaker_rivers['LENGTH_KM'].isna().any():
+            raise ValueError("Missing LENGTH_KM data in HydroRIVERS - cannot calculate RivLength")
+        if basinmaker_rivers['CATCH_SKM'].isna().any():
+            raise ValueError("Missing CATCH_SKM data in HydroRIVERS - cannot calculate BasArea")
+        if basinmaker_rivers['DIS_AV_CMS'].isna().any():
+            raise ValueError("Missing DIS_AV_CMS data in HydroRIVERS - cannot calculate Q_Mean")
+            
+        # Use real data only - NO DEFAULT VALUES
+        # River slope must be calculated from DEM - fail if not available
+        if 'RIV_SLOPE' in basinmaker_rivers.columns and not basinmaker_rivers['RIV_SLOPE'].isna().all():
+            basinmaker_rivers['RivSlope'] = basinmaker_rivers['RIV_SLOPE']
+        else:
+            raise ValueError("River slope data not available in HydroRIVERS - requires DEM-based calculation")
+            
         basinmaker_rivers['BasArea'] = basinmaker_rivers['CATCH_SKM'] * 1e6  # Convert km² to m²
-        basinmaker_rivers['BasSlope'] = 5.0  # Default basin slope
-        basinmaker_rivers['BasAspect'] = 180.0  # Default aspect
-        basinmaker_rivers['BkfWidth'] = np.maximum(1.0, basinmaker_rivers['LENGTH_KM'] * 0.1)  # Estimated width
-        basinmaker_rivers['BkfDepth'] = np.maximum(0.1, basinmaker_rivers['BkfWidth'] * 0.1)  # Estimated depth
-        basinmaker_rivers['IsLake'] = -9999  # No lake by default
+        
+        # Basin slope and aspect must be calculated from DEM - fail if not available  
+        if 'BAS_SLOPE' in basinmaker_rivers.columns and not basinmaker_rivers['BAS_SLOPE'].isna().all():
+            basinmaker_rivers['BasSlope'] = basinmaker_rivers['BAS_SLOPE']
+        else:
+            raise ValueError("Basin slope data not available in HydroRIVERS - requires DEM-based calculation")
+            
+        if 'BAS_ASPECT' in basinmaker_rivers.columns and not basinmaker_rivers['BAS_ASPECT'].isna().all():
+            basinmaker_rivers['BasAspect'] = basinmaker_rivers['BAS_ASPECT']
+        else:
+            raise ValueError("Basin aspect data not available in HydroRIVERS - requires DEM-based calculation")
+        
+        # Channel geometry must be calculated from hydraulic analysis - fail if not available
+        if 'BKF_WIDTH' in basinmaker_rivers.columns and not basinmaker_rivers['BKF_WIDTH'].isna().all():
+            basinmaker_rivers['BkfWidth'] = basinmaker_rivers['BKF_WIDTH']
+        else:
+            raise ValueError("Channel width data not available in HydroRIVERS - requires hydraulic geometry analysis")
+            
+        if 'BKF_DEPTH' in basinmaker_rivers.columns and not basinmaker_rivers['BKF_DEPTH'].isna().all():
+            basinmaker_rivers['BkfDepth'] = basinmaker_rivers['BKF_DEPTH']
+        else:
+            raise ValueError("Channel depth data not available in HydroRIVERS - requires hydraulic geometry analysis")
+        
+        # Lake attributes - only set if real lake data exists
+        basinmaker_rivers['IsLake'] = -9999  # Will be updated if lakes are linked
         basinmaker_rivers['HyLakeId'] = -9999
         basinmaker_rivers['LakeVol'] = -9999.0
         basinmaker_rivers['LakeDepth'] = -9999.0
         basinmaker_rivers['LakeArea'] = -9999.0
         basinmaker_rivers['Laketype'] = -9999
         basinmaker_rivers['IsObs'] = -9999
-        basinmaker_rivers['MeanElev'] = 200.0  # Default elevation
-        basinmaker_rivers['FloodP_n'] = 0.1  # Default Manning's n
+        
+        # Elevation must be calculated from DEM - fail if not available
+        if 'MEAN_ELEV' in basinmaker_rivers.columns and not basinmaker_rivers['MEAN_ELEV'].isna().all():
+            basinmaker_rivers['MeanElev'] = basinmaker_rivers['MEAN_ELEV']
+        else:
+            raise ValueError("Mean elevation data not available in HydroRIVERS - requires DEM-based calculation")
+            
+        # Manning's n values must be estimated from landcover - fail if not available
+        if 'FLOOD_N' in basinmaker_rivers.columns and not basinmaker_rivers['FLOOD_N'].isna().all():
+            basinmaker_rivers['FloodP_n'] = basinmaker_rivers['FLOOD_N']
+        else:
+            raise ValueError("Floodplain Manning's n not available - requires landcover analysis")
+            
+        # Use actual discharge data from HydroRIVERS
         basinmaker_rivers['Q_Mean'] = basinmaker_rivers['DIS_AV_CMS']
-        basinmaker_rivers['Ch_n'] = 0.035  # Default channel Manning's n
+        
+        # Channel Manning's n must be estimated from substrate analysis - fail if not available
+        if 'CH_N' in basinmaker_rivers.columns and not basinmaker_rivers['CH_N'].isna().all():
+            basinmaker_rivers['Ch_n'] = basinmaker_rivers['CH_N']
+        else:
+            raise ValueError("Channel Manning's n not available - requires substrate/roughness analysis")
+            
         basinmaker_rivers['DA'] = basinmaker_rivers['CATCH_SKM'] * 1e6  # Drainage area in m²
         
         # Keep essential columns for BasinMaker compatibility (including HYBAS_L12 for basin linkage)
@@ -307,8 +364,8 @@ class HydroShedsAdapter:
             self.logger.info(f"Found {len(matching_basins)} matching basin polygons")
             
             if len(matching_basins) == 0:
-                self.logger.warning("No matching basins found, falling back to river buffers")
-                return self._generate_fallback_catchments_from_rivers(rivers_gdf)
+                self.logger.error("No matching basins found - no synthetic fallback provided")
+                raise ValueError("No matching basins found")
             
             # Convert HydroBASINS format to BasinMaker catchment format
             catchments_data = []
@@ -346,26 +403,8 @@ class HydroShedsAdapter:
             
         except Exception as e:
             self.logger.error(f"Error extracting real catchments: {e}")
-            self.logger.info("Falling back to river buffer method")
-            return self._generate_fallback_catchments_from_rivers(rivers_gdf)
+            raise Exception(f"Real catchment extraction failed: {e} - no synthetic fallback provided")
     
-    def _generate_fallback_catchments_from_rivers(self, rivers_gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
-        """Fallback method: Generate simplified catchment polygons from river buffers"""
-        
-        catchments_data = []
-        
-        for idx, river in rivers_gdf.iterrows():
-            # Create a buffer around the river line
-            buffer_size = max(0.001, river['RivLength'] / 1000000)  # Rough buffer based on river length
-            catchment_geom = river.geometry.buffer(buffer_size)
-            
-            # Copy river attributes to catchment
-            catchment_data = river.to_dict()
-            catchment_data['geometry'] = catchment_geom
-            
-            catchments_data.append(catchment_data)
-        
-        return gpd.GeoDataFrame(catchments_data, crs=rivers_gdf.crs)
     
     def _convert_lakes_to_basinmaker_format(self, lakes_gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
         """Convert HydroLAKES format to BasinMaker lake format"""

@@ -254,28 +254,13 @@ class RVTGenerator:
                         if not matching_rows.empty:
                             return float(matching_rows.iloc[0, 1])  # First data column
             
-            # Fallback to seasonal defaults
-            if data_type == 'precipitation':
-                # Seasonal precipitation pattern (mm/day)
-                month = date.month
-                if month in [6, 7, 8]:  # Summer
-                    return 1.5
-                elif month in [12, 1, 2]:  # Winter
-                    return 3.0
-                else:  # Spring/Fall
-                    return 2.5
-            else:  # temperature
-                # Seasonal temperature pattern (deg_C)
-                day_of_year = date.timetuple().tm_yday
-                temp = 10.0 + 15.0 * np.sin(2 * np.pi * (day_of_year - 90) / 365)
-                return temp
+            # No real data found - fail
+            error_msg = f"No real climate data found for {date} - no synthetic fallback provided"
+            raise ValueError(error_msg)
                 
-        except Exception:
-            # Final fallback to constants
-            if data_type == 'precipitation':
-                return 2.0
-            else:
-                return 10.0
+        except Exception as e:
+            error_msg = f"Climate data extraction failed: {e} - no synthetic fallback provided"
+            raise ValueError(error_msg)
     
     def _get_flow_value(self, station_data: Dict, date: datetime) -> float:
         """Get flow value for specific date, with fallback to missing data indicator"""
