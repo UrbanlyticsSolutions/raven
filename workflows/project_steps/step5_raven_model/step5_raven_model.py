@@ -1115,18 +1115,105 @@ class Step5RAVENModel:
             return hru_gdf
     
     def _load_climate_data(self) -> pd.DataFrame:
-        """Load climate data from workspace climate folder"""
+        """Load climate data from workspace climate folder - preferring Daymet over ECCC IDW"""
         try:
-            climate_csv = self.workspace_dir / "climate" / "climate_forcing.csv"
-            if not climate_csv.exists():
-                print(f"WARNING: Climate data not found: {climate_csv}")
-                return None
+            # First check for Daymet data (preferred for mountain watersheds)
+            daymet_rvt = self.workspace_dir / "climate" / "daymet_precipitation.rvt"
+            eccc_csv = self.workspace_dir / "climate" / "climate_forcing.csv"
             
-            climate_df = pd.read_csv(climate_csv, index_col=0, parse_dates=True)
-            print(f"  Loaded climate data: {len(climate_df)} records from {climate_df.index[0].strftime('%Y-%m-%d')} to {climate_df.index[-1].strftime('%Y-%m-%d')}")
-            return climate_df
+            # Check if Daymet data is available and prefer it
+            if daymet_rvt.exists():
+                print(f"  Found Daymet gridded data: {daymet_rvt}")
+                climate_df = self._parse_daymet_rvt(daymet_rvt)
+                if climate_df is not None:
+                    print(f"  Using DAYMET gridded data: {len(climate_df)} records from {climate_df.index[0].strftime('%Y-%m-%d')} to {climate_df.index[-1].strftime('%Y-%m-%d')}")
+                    print(f"  Mean annual precipitation: {climate_df['PRECIP'].sum() / ((climate_df.index[-1] - climate_df.index[0]).days / 365.25):.1f} mm/year")
+                    return climate_df
+                else:
+                    print(f"  WARNING: Failed to parse Daymet data, falling back to ECCC")
+            
+            # Fall back to ECCC IDW data if Daymet not available
+            if eccc_csv.exists():
+                print(f"  Using ECCC IDW data: {eccc_csv}")
+                climate_df = pd.read_csv(eccc_csv, index_col=0, parse_dates=True)
+                print(f"  Loaded ECCC climate data: {len(climate_df)} records from {climate_df.index[0].strftime('%Y-%m-%d')} to {climate_df.index[-1].strftime('%Y-%m-%d')}")
+                print(f"  Mean annual precipitation: {climate_df['PRECIP'].sum() / ((climate_df.index[-1] - climate_df.index[0]).days / 365.25):.1f} mm/year")
+                return climate_df
+            else:
+                print(f"WARNING: No climate data found (checked: {daymet_rvt}, {eccc_csv})")
+                return None
+                
         except Exception as e:
             print(f"WARNING: Failed to load climate data: {e}")
+            return None
+    
+    def _parse_daymet_rvt(self, daymet_file: Path) -> pd.DataFrame:
+        """Parse Daymet RVT file and convert to DataFrame format"""
+        try:
+            with open(daymet_file, 'r') as f:
+                lines = f.readlines()
+            
+            # Find the start of the data section
+            data_start_idx = None
+            for i, line in enumerate(lines):
+                if line.strip().startswith(':Parameters,'):
+                    data_start_idx = i + 2  # Skip parameters and units lines
+                    break
+            
+            if data_start_idx is None:
+                print(f"  ERROR: Could not find data section in Daymet RVT file")
+                return None
+            
+            # Extract data lines
+            data_lines = []
+            for i in range(data_start_idx, len(lines)):
+                line = lines[i].strip()
+                if line and not line.startswith('#') and not line.startswith(':'):
+                    data_lines.append(line)
+            
+            # Parse data into DataFrame
+            data_records = []
+            for line in data_lines:
+                values = line.split(',')
+                if len(values) >= 3:
+                    try:
+                        temp_max = float(values[0])
+                        temp_min = float(values[1]) 
+                        precip = float(values[2])
+                        data_records.append([temp_max, temp_min, precip])
+                    except (ValueError, IndexError):
+                        continue
+            
+            if not data_records:
+                print(f"  ERROR: No valid data records found in Daymet RVT file")
+                return None
+            
+            # Find start date from MultiData line
+            start_date = None
+            for line in lines:
+                if line.strip().startswith(':MultiData'):
+                    continue
+                elif ' 00:00:00 ' in line and not line.startswith('#'):
+                    date_str = line.split()[0]
+                    try:
+                        start_date = pd.to_datetime(date_str)
+                        break
+                    except:
+                        continue
+            
+            if start_date is None:
+                print(f"  ERROR: Could not find start date in Daymet RVT file")
+                return None
+            
+            # Create DataFrame with date index
+            dates = pd.date_range(start=start_date, periods=len(data_records), freq='D')
+            climate_df = pd.DataFrame(data_records, index=dates, columns=['TEMP_MAX', 'TEMP_MIN', 'PRECIP'])
+            
+            print(f"  Successfully parsed Daymet RVT: {len(climate_df)} days")
+            return climate_df
+            
+        except Exception as e:
+            print(f"  ERROR parsing Daymet RVT file: {e}")
             return None
     
     def _validate_routing_network(self, subbasin_gdf: gpd.GeoDataFrame) -> None:
@@ -1258,10 +1345,8 @@ class Step5RAVENModel:
         
         rvi_file = self.models_dir / outlet_name / f"{outlet_name}.rvi"
         
-        # Get RVI parameters from centralized table
-        rvi_params = self.config_manager.get_required_parameter('raven_complete_parameter_table', 'rvi_parameters')
-        temporal_config = rvi_params['temporal_configuration']
-        model_config = rvi_params['model_configuration']
+        # Get model configuration from the simplified config structure
+        model_config_section = self.config['model_config']
         
         with open(rvi_file, 'w') as f:
             f.write(f"# RAVEN Input file for {outlet_name}\n")
@@ -1276,40 +1361,39 @@ class Step5RAVENModel:
                 f.write(f":EndDate          {end_date} 00:00:00\n")
             else:
                 # Fallback to config defaults if no climate data
-                f.write(f":StartDate        {temporal_config[':StartDate']['example']}\n")
-                f.write(f":EndDate          {temporal_config[':EndDate']['example']}\n")
-            f.write(f":TimeStep         {temporal_config[':TimeStep']['default']}\n")
-            f.write(f":Method           {temporal_config[':Method']['default']}\n\n")
+                f.write(f":StartDate        1980-01-01 00:00:00\n")
+                f.write(f":EndDate          2023-12-31 00:00:00\n")
+            f.write(f":TimeStep         1.0\n")
+            f.write(f":Method           ORDERED_SERIES\n\n")
             
-            # Model configuration from parameter table - complete HBV setup
-            soil_model = model_config[':SoilModel']['default']
-            routing = model_config[':Routing']['default']
-            evaporation = model_config[':Evaporation']['default']
+            # Model configuration from simplified config - complete HBV setup 
+            soil_model = model_config_section['soil_model']
+            routing = model_config_section['routing']
+            evaporation = model_config_section['evaporation']
             
             f.write("#------------------------------------------------------------------------\n")
             f.write("# Model options\n")
             f.write("#\n")
-            f.write(f":Method              {temporal_config[':Method']['default']}\n\n")
+            f.write(f":Method              ORDERED_SERIES\n\n")
             f.write(f":Routing             {routing}\n")
             
-            # Add HBV-specific model options from config
-            model_options = model_config.get('model_options', {})
-            f.write(f":CatchmentRoute      {model_options.get('CatchmentRoute', 'TRIANGULAR_UH')}\n\n")
-            f.write(f":Evaporation         {model_options.get('OW_Evaporation', 'PET_FROMMONTHLY')}\n")
-            f.write(f":OW_Evaporation      {model_options.get('OW_Evaporation', 'PET_FROMMONTHLY')}\n")
+            # Add model options from config
+            model_options = model_config_section.get('model_options', {})
+            f.write(f":CatchmentRoute      {model_options.get('CatchmentRoute', 'ROUTE_TRI_CONVOLUTION')}\n\n")
+            f.write(f":Evaporation         {evaporation}\n")
+            f.write(f":OW_Evaporation      {evaporation}\n")
             f.write(f":SWRadiationMethod   {model_options.get('SWRadiationMethod', 'SW_RAD_DEFAULT')}\n")
             f.write(f":SWCloudCorrect      {model_options.get('SWCloudCorrect', 'SW_CLOUD_CORR_NONE')}\n")
             f.write(f":SWCanopyCorrect     {model_options.get('SWCanopyCorrect', 'SW_CANOPY_CORR_NONE')}\n")
             f.write(f":LWRadiationMethod   {model_options.get('LWRadiationMethod', 'LW_RAD_DEFAULT')}\n")
             f.write(f":RainSnowFraction    {model_options.get('RainSnowFraction', 'RAINSNOW_HBV')}\n")
             f.write(f":PotentialMeltMethod {model_options.get('PotentialMeltMethod', 'POTMELT_HBV')}\n")
-            f.write(f":OroTempCorrect      {model_options.get('OroTempCorrect', 'OROCORR_HBV')}\n")
-            f.write(f":OroPrecipCorrect    {model_options.get('OroPrecipCorrect', 'OROCORR_HBV')}\n")
-            f.write(f":OroPETCorrect       {model_options.get('OroPETCorrect', 'OROCORR_HBV')}\n")
+            f.write(f":OroTempCorrect      {model_options.get('OroTempCorrect', 'OROCORR_SIMPLELAPSE')}\n")
+            f.write(f":OroPrecipCorrect    {model_options.get('OroPrecipCorrect', 'OROCORR_SIMPLELAPSE')}\n")
             f.write(f":CloudCoverMethod    {model_options.get('CloudCoverMethod', 'CLOUDCOV_NONE')}\n")
             f.write(f":PrecipIceptFract    {model_options.get('PrecipIceptFract', 'PRECIP_ICEPT_USER')}\n")
             f.write(f":MonthlyInterpolationMethod {model_options.get('MonthlyInterpolationMethod', 'MONTHINT_LINEAR_21')}\n\n")
-            f.write(f":SoilModel           {soil_model}\n\n")
+            f.write(f":SoilModel           {soil_model} {model_config_section['soil_layers']}\n\n")
             
             f.write("#------------------------------------------------------------------------\n")
             f.write("# Soil Layer Alias Definitions \n")
@@ -1413,50 +1497,42 @@ class Step5RAVENModel:
             
             print(f"[HYBRID] Using {len(actual_landuse_classes)} landuse, {len(actual_veg_classes)} vegetation, {len(actual_soil_classes)} soil classes from HRU data with your config system")
             
-            # Use your config system with ACTUAL classes (not VEG_ALL, LU_ALL)
+            # Generate 3-layer soil classes like Pelly model (TOPSOIL, FAST_RES, SLOW_RES)
             f.write(":SoilClasses\n")
-            f.write("  :Attributes POROSITY FIELD_CAPACITY WILTING_POINT\n")
-            f.write("  :Units      none     none           none\n")
+            f.write("  :Attributes\n")
+            f.write("  :Units\n")
             
-            # HYBRID: Generate for each ACTUAL soil class using your config (FAIL-FAST)
+            # Generate 3-layer soil classes for each soil type
             for soil_class in sorted(actual_soil_classes):
-                soil_data = self.config_manager.get_soil_profile_params(soil_class)  # Will raise if missing
-                # FAIL-FAST: Require all soil parameters (check both cases)
-                params = soil_data['parameters']
-                
-                # Check for porosity (uppercase or lowercase)
-                if 'POROSITY' in params:
-                    porosity = float(params['POROSITY'])
-                elif 'porosity' in params:
-                    porosity = float(params['porosity'])
-                else:
-                    raise ValueError(f"Missing POROSITY/porosity parameter for soil class {soil_class}")
-                
-                # Check for field capacity
-                if 'FIELD_CAPACITY' in params:
-                    field_capacity = float(params['FIELD_CAPACITY'])
-                elif 'field_capacity' in params:
-                    field_capacity = float(params['field_capacity'])
-                else:
-                    raise ValueError(f"Missing FIELD_CAPACITY/field_capacity parameter for soil class {soil_class}")
-                
-                # Check for wilting point (multiple possible names)
-                if 'WILTING_POINT' in params:
-                    wilting_point = float(params['WILTING_POINT'])
-                elif 'wilting_point' in params:
-                    wilting_point = float(params['wilting_point'])
-                elif 'SAT_WILT' in params:
-                    wilting_point = float(params['SAT_WILT'])
-                elif 'sat_wilt' in params:
-                    wilting_point = float(params['sat_wilt'])
-                else:
-                    raise ValueError(f"Missing wilting point parameter for soil class {soil_class}. Available: {list(params.keys())}")
-                f.write(f"  {soil_class:12} {porosity:.3f} {field_capacity:.3f} {wilting_point:.3f}\n")
+                f.write(f"  {soil_class}_TOP\n")
+                f.write(f"  {soil_class}_FAST\n") 
+                f.write(f"  {soil_class}_SLOW\n")
             f.write(":EndSoilClasses\n\n")
             
             f.write(":SoilProfiles\n")
+            # Generate 3-layer soil profiles like Pelly model
             for soil_class in sorted(actual_soil_classes):
-                f.write(f"  {soil_class} 1 {soil_class} 1.0\n")
+                # Create 3-layer profile: TOPSOIL -> FAST_RES -> SLOW_RES
+                topsoil = f"{soil_class}_TOP"
+                fast_res = f"{soil_class}_FAST" 
+                slow_res = f"{soil_class}_SLOW"
+                
+                # Get layer thicknesses from config or use Pelly defaults
+                try:
+                    soil_data = self.config_manager.get_soil_profile_params(soil_class)
+                    layers = soil_data.get('layers', [])
+                    if len(layers) >= 3:
+                        top_thickness = layers[0].get('thickness', 0.986)
+                        fast_thickness = layers[1].get('thickness', 2.078) 
+                        slow_thickness = layers[2].get('thickness', 0.598)
+                    else:
+                        # Use Pelly default thicknesses
+                        top_thickness, fast_thickness, slow_thickness = 0.986, 2.078, 0.598
+                except:
+                    # Use Pelly default thicknesses
+                    top_thickness, fast_thickness, slow_thickness = 0.986, 2.078, 0.598
+                
+                f.write(f"  {soil_class} 3 {topsoil} {top_thickness:.3f} {fast_res} {fast_thickness:.3f} {slow_res} {slow_thickness:.3f}\n")
             f.write(":EndSoilProfiles\n\n")
             
             f.write(":VegetationClasses\n")
@@ -1497,16 +1573,16 @@ class Step5RAVENModel:
                 try:
                     veg_data = self.config_manager.get_vegetation_class_params(veg_class)  # Will raise if missing
                     veg_params = veg_data['parameters']
-                    max_capacity = float(veg_params.get('MAX_CANOPY_CAPACITY', 10000))
-                    max_snow_capacity = float(veg_params.get('MAX_SNOW_CAPACITY', 10000))
+                    max_capacity = float(veg_params.get('MAX_CANOPY_CAPACITY', 5))
+                    max_snow_capacity = float(veg_params.get('MAX_SNOW_CAPACITY', 5))
                     tfrain = float(veg_params.get('TFRAIN', 0.88))
                     tfsnow = float(veg_params.get('TFSNOW', 0.88))
                     # RELATIVE_LAI: 12 monthly values (seasonal variation for LAI)
                     relative_lai = veg_params.get('RELATIVE_LAI', [1.0]*12)
                 except:
                     # Use benchmark defaults for undefined vegetation classes
-                    max_capacity = 10000
-                    max_snow_capacity = 10000
+                    max_capacity = 5
+                    max_snow_capacity = 5
                     tfrain = 0.88
                     tfsnow = 0.88
                     # Default RELATIVE_LAI: constant 1.0 throughout year
@@ -1529,35 +1605,32 @@ class Step5RAVENModel:
                 f.write(f"  {landuse_class:12} {imperm:.1f} {forest_cov:.1f}\n")
             f.write(":EndLandUseClasses\n\n")
             
-            # RAVEN HBV soil parameter list with actual soil classes (no aliases)
+            # 3-layer soil parameter list like Pelly model
             f.write(":SoilParameterList\n")
-            f.write("  :Parameters,                POROSITY,FIELD_CAPACITY,    SAT_WILT,    HBV_BETA, MAX_CAP_RISE_RATE,MAX_PERC_RATE,BASEFLOW_COEFF,            BASEFLOW_N\n")
-            f.write("  :Units     ,                    none,          none,        none,        none,              mm/d,         mm/d,           1/d,                  none\n")
+            f.write("  :Parameters,        POROSITY,  PET_CORRECTION,        HBV_BETA,          MAX_PERC_RATE,  BASEFLOW_COEFF,      BASEFLOW_N, MAX_CAP_RISE_RATE\n")
+            f.write("       :Units,               -,               -,               -,               -,               -,                        -,              mm/d\n")
             
-            # Use RAVEN HBV defaults for all soil classes
+            # Generate parameters for each 3-layer soil system
             for soil_class in sorted(actual_soil_classes):
+                # Get base parameters from config
                 try:
                     soil_params = self.config_manager.get_soil_profile_params(soil_class)['parameters']
-                    porosity = float(soil_params.get('POROSITY', 0.45))
-                    field_capacity = float(soil_params.get('FIELD_CAPACITY', 0.22))
-                    sat_wilt = float(soil_params.get('SAT_WILT', 0.08))
-                    hbv_beta = float(soil_params.get('HBV_BETA', 1.2))
-                    max_cap_rise = float(soil_params.get('MAX_CAP_RISE_RATE', 2.5))
-                    max_perc_rate = float(soil_params.get('MAX_PERC_RATE', 15.0))
-                    baseflow_coeff = float(soil_params.get('BASEFLOW_COEFF', 0.0))
-                    baseflow_n = float(soil_params.get('BASEFLOW_N', 1.0))
+                    base_porosity = float(soil_params.get('POROSITY', 0.4))
+                    base_hbv_beta = float(soil_params.get('HBV_BETA', 4.142))
+                    base_pet_correction = float(soil_params.get('PET_CORRECTION', 1.0))
                 except:
-                    # RAVEN HBV defaults
-                    porosity = 0.45
-                    field_capacity = 0.22
-                    sat_wilt = 0.08
-                    hbv_beta = 1.2
-                    max_cap_rise = 2.5
-                    max_perc_rate = 15.0
-                    baseflow_coeff = 0.0
-                    baseflow_n = 1.0
+                    base_porosity = 0.4
+                    base_hbv_beta = 4.142
+                    base_pet_correction = 1.0
                 
-                f.write(f"  {soil_class:12},              {porosity:.8f},     {field_capacity:.7f},  {sat_wilt:.8f},    {hbv_beta:.6f},          {max_cap_rise:.5f},     {max_perc_rate:.1f},      {baseflow_coeff:.1f},                   {baseflow_n:.1f}\n")
+                # TOP layer (like Pelly TOPSOIL): No baseflow, high percolation
+                f.write(f"         {soil_class}_TOP,              {base_porosity:.1f},              {base_pet_correction:.1f},              {base_hbv_beta:.3f},             {18.93:.2f},              0,                                0,               2.5,\n")
+                
+                # FAST layer (like Pelly FAST_RES): Strong baseflow, medium percolation  
+                f.write(f"         {soil_class}_FAST,              {base_porosity:.1f},              {base_pet_correction:.1f},              {base_hbv_beta:.3f},             {14.65:.2f},              {2.070:.3f},               {9.744:.3f},     3.5,\n")
+                
+                # SLOW layer (like Pelly SLOW_RES): Weak baseflow, no deep percolation
+                f.write(f"         {soil_class}_SLOW,              {base_porosity:.1f},              {base_pet_correction:.1f},              {base_hbv_beta:.3f},             0,                         {0.025:.3f},               {9.744:.3f},     1.0,\n")
             
             f.write(":EndSoilParameterList\n")
             
@@ -1840,28 +1913,43 @@ class Step5RAVENModel:
         return channel_data
     
     def _generate_rvt_file(self, outlet_name: str, latitude: float, longitude: float) -> Path:
-        """Generate RVT file using RAVEN benchmark format"""
+        """Generate RVT file using RAVEN benchmark format - preferring Daymet over ECCC IDW"""
         
         outlet_dir = self.models_dir / outlet_name
         rvt_file = outlet_dir / f"{outlet_name}.rvt"
         
-        # Load climate data
-        climate_csv = self.workspace_dir / "climate" / "climate_forcing.csv"
-        if not climate_csv.exists():
-            raise FileNotFoundError(f"Climate data not found: {climate_csv}")
+        # Load climate data using the prioritized loading method
+        climate_df = self._load_climate_data()
+        if climate_df is None:
+            raise FileNotFoundError(f"No climate data found in workspace")
         
-        climate_df = pd.read_csv(climate_csv, index_col=0, parse_dates=True)
+        # Check which data source is being used
+        daymet_rvt = self.workspace_dir / "climate" / "daymet_precipitation.rvt"
+        using_daymet = daymet_rvt.exists()
         
-        # Use existing BasinMaker RVT generator logic
+        # Convert climate data to temporary CSV format for existing RVT generator
+        temp_climate_csv = outlet_dir / "temp_climate_data.csv"
+        climate_df.to_csv(temp_climate_csv)
+        
+        # Use existing BasinMaker RVT generator logic for both Daymet and ECCC data
         from processors.rvt_generator import RVTGenerator
         
         rvt_generator = RVTGenerator(outlet_dir)
+        
+        if using_daymet:
+            print(f"  Generating RVT from Daymet gridded data using existing RVT generator...")
+        else:
+            print(f"  Generating RVT from ECCC IDW data using existing RVT generator...")
+        
         rvt_file = rvt_generator.generate_rvt_from_csv(
-            csv_file_path=climate_csv,
+            csv_file_path=temp_climate_csv,
             outlet_name=outlet_name,
             latitude=latitude,
             longitude=longitude
         )
+        
+        # Clean up temporary file
+        temp_climate_csv.unlink(missing_ok=True)
         
         # Add hydrometric observation gauges if available (BasinMaker format)
         obs_dir = outlet_dir / "obs"
@@ -1885,13 +1973,8 @@ class Step5RAVENModel:
                         temp_str = ' '.join([f"{temp:.1f}" for temp in monthly_temps])
                         f.write(f"  :MonthlyAveTemperature {temp_str}\n")
                         
-                        # Calculate monthly average PET values from climate data dynamically
-                        print("[DEBUG] Calculating monthly PET values...")
-                        monthly_pet = self._calculate_monthly_average_pet()
-                        print(f"[DEBUG] Monthly PET values: {monthly_pet}")
-                        pet_str = ' '.join([f"{pet:.1f}" for pet in monthly_pet])
-                        print(f"[DEBUG] PET string: {pet_str}")
-                        f.write(f"  :MonthlyAveEvaporation {pet_str}\n")
+                        # Remove MonthlyAveEvaporation - let Hargreaves calculate PET dynamically
+                        # f.write(f"  :MonthlyAveEvaporation {pet_str}\n")
                         
                         f.write(f"  :RedirectToFile ./obs/{obs_file.name}\n")
                         f.write(f":EndGauge\n\n")
@@ -1899,6 +1982,118 @@ class Step5RAVENModel:
 
         
         return rvt_file
+    
+    def _generate_rvt_from_daymet(self, daymet_file: Path, output_file: Path, outlet_name: str, latitude: float, longitude: float):
+        """Generate RVT file from Daymet data by copying and modifying the existing RVT"""
+        try:
+            # Read the Daymet RVT file
+            with open(daymet_file, 'r') as f:
+                lines = f.readlines()
+            
+            # Process lines to ensure strict RAVEN compliance
+            output_lines = []
+            
+            # Add custom header
+            header_lines = [
+                "#########################################################################\n",
+                f"# RAVEN Climate Forcing for {outlet_name}\n",
+                "# Data Source: DAYMET v4 Gridded Daily Climate Data\n", 
+                "# Spatial Resolution: 1km x 1km grid\n",
+                "# Temporal Coverage: 1980-2023\n",
+                "# Elevation: 988m (grid cell elevation)\n",
+                f"# Generated on: {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')}\n",
+                "# ADVANTAGE: Captures orographic precipitation enhancement for mountain watersheds\n",
+                "#########################################################################\n",
+                "\n"
+            ]
+            output_lines.extend(header_lines)
+            
+            # Process original content
+            in_data_section = False
+            data_count = 0
+            
+            for line in lines:
+                line_stripped = line.strip()
+                
+                # Skip original header
+                if line_stripped.startswith('#'):
+                    continue
+                
+                # Replace gauge name
+                if line_stripped.startswith(':Gauge'):
+                    output_lines.append(f":Gauge\t\t\t\t\tGauge_{outlet_name}\n")
+                    continue
+                
+                # Update coordinates
+                if line_stripped.startswith(':Latitude'):
+                    output_lines.append(f"\t:Latitude\t\t\t{latitude}\n")
+                    continue
+                    
+                if line_stripped.startswith(':Longitude'):
+                    output_lines.append(f"\t:Longitude\t\t\t{longitude}\n")
+                    continue
+                
+                # Keep other gauge properties as-is
+                if line_stripped.startswith(':Elevation') or line_stripped.startswith(':MonthlyAve'):
+                    output_lines.append(line)
+                    continue
+                
+                # Handle MultiData section
+                if line_stripped.startswith(':MultiData'):
+                    output_lines.append(line)
+                    in_data_section = True
+                    continue
+                
+                # Handle date/count line
+                if in_data_section and '1980-01-01 00:00:00 1.0' in line_stripped:
+                    output_lines.append(line)
+                    continue
+                
+                # Handle parameters and units
+                if line_stripped.startswith(':Parameters') or line_stripped.startswith(':Units'):
+                    output_lines.append(line)
+                    continue
+                
+                # Handle data lines - be very strict about format
+                if in_data_section and ',' in line_stripped and not line_stripped.startswith(':'):
+                    values = line_stripped.split(',')
+                    if len(values) == 3:
+                        try:
+                            # Validate that all values are numeric
+                            temp_max = float(values[0])
+                            temp_min = float(values[1])
+                            precip = float(values[2])
+                            
+                            # Format with consistent precision
+                            formatted_line = f"{temp_max:.2f},{temp_min:.2f},{precip:.2f}\n"
+                            output_lines.append(formatted_line)
+                            data_count += 1
+                        except ValueError:
+                            print(f"  WARNING: Skipping invalid data line: {line_stripped}")
+                            continue
+                    else:
+                        print(f"  WARNING: Skipping malformed data line: {line_stripped}")
+                        continue
+                
+                # Stop when we hit the end of data
+                if in_data_section and (line_stripped.startswith(':') or line_stripped.startswith('#')) and not line_stripped.startswith(':Parameters') and not line_stripped.startswith(':Units'):
+                    in_data_section = False
+                    break
+            
+            print(f"  Processed {data_count} data records from Daymet")
+            
+            # Write the cleaned content to output file
+            with open(output_file, 'w') as f:
+                f.writelines(output_lines)
+            
+            print(f"  Successfully generated Daymet-based RVT: {output_file}")
+            
+        except Exception as e:
+            print(f"  ERROR generating Daymet RVT: {e}")
+            # Fall back to copying the file directly
+            import shutil
+            shutil.copy(daymet_file, output_file)
+            print(f"  Fallback: copied Daymet file directly")
     
     def _calculate_monthly_average_temperatures(self) -> List[float]:
         """Calculate monthly average temperatures from climate data - FAIL FAST approach"""
@@ -1958,20 +2153,30 @@ class Step5RAVENModel:
             monthly_temps = self._calculate_monthly_average_temperatures()
             monthly_pet_values = []
             
-            # Temperature-based PET estimation using Hargreaves method (mm/month)
-            # PET = 0.0023 × (Tmean + 17.8) × sqrt(Tmax - Tmin) × Ra × days_in_month
-            seasonal_radiation_factors = [0.5, 0.7, 1.2, 2.0, 3.2, 4.0, 4.5, 3.8, 2.5, 1.5, 0.8, 0.5]  # Approximates solar radiation variation
+            # Temperature-based PET estimation using simplified method (mm/month)
+            # Use realistic monthly PET values for temperate climate
+            # Typical range: 20-120 mm/month, with seasonal variation
             days_in_month = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
             
+            # Base monthly PET factors (mm/day) for temperate climate
+            # These are realistic values: winter ~0.5-1 mm/d, summer ~3-4 mm/d
+            monthly_pet_factors = [0.8, 1.2, 2.0, 3.0, 4.0, 4.5, 4.2, 3.5, 2.5, 1.8, 1.0, 0.7]
+            
             for i, temp_mean in enumerate(monthly_temps):
-                if temp_mean <= -10:  # Very cold months - minimal PET
-                    base_pet = 0.5
+                if temp_mean <= -5:  # Very cold months - minimal PET
+                    daily_pet = 0.3  # 0.3 mm/day
+                elif temp_mean <= 0:  # Cold months
+                    daily_pet = 0.5  # 0.5 mm/day  
+                elif temp_mean <= 5:  # Cool months
+                    daily_pet = 1.0  # 1.0 mm/day
                 else:
-                    # Hargreaves-like formula: PET ≈ 0.0023 × (Tmean + 17.8) × Ra_factor × days
-                    base_pet = 0.0023 * (temp_mean + 17.8) * seasonal_radiation_factors[i] * days_in_month[i]
-                    base_pet = max(0.1, base_pet)  # Minimum 0.1 mm/month
+                    # Scale based on temperature, but cap at reasonable values
+                    temp_factor = min(1.5, max(0.5, (temp_mean + 5) / 20))
+                    daily_pet = monthly_pet_factors[i] * temp_factor
+                    daily_pet = min(5.0, max(0.3, daily_pet))  # Cap between 0.3-5.0 mm/day
                 
-                monthly_pet_values.append(base_pet)
+                monthly_pet_mm = daily_pet * days_in_month[i]
+                monthly_pet_values.append(monthly_pet_mm)
             
             return monthly_pet_values
         

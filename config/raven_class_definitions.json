@@ -9,10 +9,25 @@
   "model_config": {
     "soil_model": "SOIL_MULTILAYER",
     "soil_layers": 3,
-    "routing": "ROUTE_HYDROLOGIC",
+    "routing": "ROUTE_DIFFUSIVE_WAVE",
     "evaporation": "PET_HARGREAVES_1985",
+    "ow_evaporation": "PET_HARGREAVES_1985",
     "rain_snow_fraction": "RAINSNOW_HBV",
-    "potential_melt_method": "POTMELT_HBV"
+    "potential_melt_method": "POTMELT_HBV",
+    "model_options": {
+      "CatchmentRoute": "ROUTE_TRI_CONVOLUTION",
+      "SWRadiationMethod": "SW_RAD_DEFAULT",
+      "SWCloudCorrect": "SW_CLOUD_CORR_NONE",
+      "SWCanopyCorrect": "SW_CANOPY_CORR_NONE",
+      "LWRadiationMethod": "LW_RAD_DEFAULT",
+      "RainSnowFraction": "RAINSNOW_HBV",
+      "PotentialMeltMethod": "POTMELT_HBV",
+      "OroTempCorrect": "OROCORR_SIMPLELAPSE",
+      "OroPrecipCorrect": "OROCORR_SIMPLELAPSE",
+      "CloudCoverMethod": "CLOUDCOV_NONE",
+      "PrecipIceptFract": "PRECIP_ICEPT_USER",
+      "MonthlyInterpolationMethod": "MONTHINT_LINEAR_21"
+    }
   },
   
   "aliases": {
@@ -450,14 +465,15 @@
         {"soil_class": "LOAM_SLOW", "thickness": 5.0}
       ],
       "parameters": {
-        "POROSITY": 0.45,
+        "POROSITY": 0.4,
         "FIELD_CAPACITY": 0.22,
         "SAT_WILT": 0.08,
-        "HBV_BETA": 1.2,
+        "HBV_BETA": 8.0,
         "MAX_CAP_RISE_RATE": 2.5,
-        "MAX_PERC_RATE": 15.0,
-        "BASEFLOW_COEFF": 0.02,
-        "BASEFLOW_N": 1.0
+        "MAX_PERC_RATE": 5.0,
+        "BASEFLOW_COEFF": 5.0,
+        "BASEFLOW_N": 15.0,
+        "PET_CORRECTION": 1.0
       }
     },
     "CLAY": {
@@ -535,14 +551,15 @@
         {"soil_class": "SANDY_LOAM_SLOW", "thickness": 5.0}
       ],
       "parameters": {
-        "POROSITY": 0.52,
+        "POROSITY": 0.4,
         "FIELD_CAPACITY": 0.15,
         "SAT_WILT": 0.05,
-        "HBV_BETA": 0.8,
+        "HBV_BETA": 8.0,
         "MAX_CAP_RISE_RATE": 3.5,
-        "MAX_PERC_RATE": 25.0,
-        "BASEFLOW_COEFF": 0.05,
-        "BASEFLOW_N": 1.2
+        "MAX_PERC_RATE": 3.0,
+        "BASEFLOW_COEFF": 5.0,
+        "BASEFLOW_N": 15.0,
+        "PET_CORRECTION": 1.0
       }
     },
     "SILTY_CLAY_LOAM": {
@@ -575,7 +592,7 @@
         "HBV_BETA": 1.4,
         "MAX_CAP_RISE_RATE": 2.8,
         "MAX_PERC_RATE": 18.0,
-        "BASEFLOW_COEFF": 0.025,
+        "BASEFLOW_COEFF": 0.1,
         "BASEFLOW_N": 1.1
       }
     },
@@ -625,7 +642,7 @@
         "SAT_WILT": 0.03,
         "HBV_BETA": 0.6,
         "MAX_CAP_RISE_RATE": 4.0,
-        "MAX_PERC_RATE": 35.0,
+        "MAX_PERC_RATE": 5.0,
         "BASEFLOW_COEFF": 0.08,
         "BASEFLOW_N": 1.4
       }
