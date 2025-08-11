@@ -2120,7 +2120,7 @@ class Step6ValidateRunModel:
             with open(config_path, 'w') as f:
                 f.write("ProgramType DDS\n")
                 f.write("ObjectiveFunction GCOP\n")
-                f.write("ModelExecutable cmd.exe /C raven_run.bat\n")
+                f.write("ModelExecutable cmd.exe /C \"raven_run.bat && python calc_objective.py\"\n")
                 f.write("PreserveBestModel\n")
                 f.write("PreserveModelOutput\n")
                 f.write("ObjFuncSeparator ;\n\n")
@@ -2242,6 +2242,80 @@ class Step6ValidateRunModel:
             
         except Exception as e:
             result['error'] = f"Failed to create templates: {str(e)}"
+            return result
+    
+    def _create_nash_sutcliffe_objective(self, calibration_dir: Path, obs_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Create objective function script that calculates Nash-Sutcliffe efficiency"""
+        result = {'success': False, 'error': None}
+        
+        try:
+            obj_script = calibration_dir / "calc_objective.py"
+            
+            with open(obj_script, 'w') as f:
+                f.write("#!/usr/bin/env python3\n")
+                f.write("import pandas as pd\nimport numpy as np\n\n")
+                f.write("def calculate_nash_sutcliffe():\n")
+                f.write("    try:\n")
+                f.write("        # Read simulated data\n")
+                f.write("        sim_file = 'output/Hydrographs.csv'\n")
+                f.write("        sim_df = pd.read_csv(sim_file)\n")
+                f.write("        \n")
+                f.write("        # Read observed data\n")
+                f.write("        obs_file = 'obs/observed_streamflow.rvt'\n")
+                f.write("        with open(obs_file, 'r') as f:\n")
+                f.write("            lines = f.readlines()[2:]  # Skip header\n")
+                f.write("        obs_flow = [float(line.strip()) for line in lines]\n")
+                f.write("        \n")
+                f.write("        # Get simulated discharge column\n")
+                f.write("        sim_col = None\n")
+                f.write("        for col in sim_df.columns:\n")
+                f.write("            if 'gauge' in col.lower() and 'm3/s' in col:\n")
+                f.write("                sim_col = col\n")
+                f.write("                break\n")
+                f.write("        \n")
+                f.write("        if sim_col is None:\n")
+                f.write("            return -999  # Error indicator\n")
+                f.write("        \n")
+                f.write("        sim_flow = sim_df[sim_col].values\n")
+                f.write("        \n")
+                f.write("        # Match lengths\n")
+                f.write("        min_len = min(len(obs_flow), len(sim_flow))\n")
+                f.write("        obs_flow = np.array(obs_flow[:min_len])\n")
+                f.write("        sim_flow = sim_flow[:min_len]\n")
+                f.write("        \n")
+                f.write("        # Calculate Nash-Sutcliffe efficiency\n")
+                f.write("        obs_mean = np.mean(obs_flow)\n")
+                f.write("        numerator = np.sum((obs_flow - sim_flow) ** 2)\n")
+                f.write("        denominator = np.sum((obs_flow - obs_mean) ** 2)\n")
+                f.write("        \n")
+                f.write("        if denominator == 0:\n")
+                f.write("            return -999\n")
+                f.write("        \n")
+                f.write("        nse = 1 - (numerator / denominator)\n")
+                f.write("        return -nse  # Return negative for minimization\n")
+                f.write("        \n")
+                f.write("    except Exception as e:\n")
+                f.write("        return -999\n")
+                f.write("\n")
+                f.write("if __name__ == '__main__':\n")
+                f.write("    obj_value = calculate_nash_sutcliffe()\n")
+                f.write("    with open('obj1.txt', 'w') as f:\n")
+                f.write("        f.write(f'{obj_value:.6f}\\n')\n")
+            
+            # Create batch script that calls the Python objective function
+            batch_obj = calibration_dir / "calc_obj.bat"
+            with open(batch_obj, 'w') as f:
+                f.write("@echo off\n")
+                f.write("python calc_objective.py\n")
+                f.write("if %errorlevel% neq 0 (\n")
+                f.write("    echo -999 > obj1.txt\n")
+                f.write(")\n")
+            
+            result['success'] = True
+            return result
+            
+        except Exception as e:
+            result['error'] = f"Failed to create objective function: {str(e)}"
             return result
 
     def _create_advanced_ostrich_config(self, config_path: Path, model_dir: Path, 
