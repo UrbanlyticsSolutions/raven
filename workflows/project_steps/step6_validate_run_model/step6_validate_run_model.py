@@ -1006,7 +1006,7 @@ class Step6ValidateRunModel:
                         'gauge_count': len(stations_data.get('top_5_stations', []))
                     })
                     
-                    print(f"✅ Found gauge data but no spatial integration from Step 5")
+                    print(f"[OK] Found gauge data but no spatial integration from Step 5")
                     selected_station = stations_data.get('selected_station', {})
                     station_id = selected_station.get('id', 'Unknown')
                     print(f"  Will use primary station: {station_id}")
@@ -1016,7 +1016,7 @@ class Step6ValidateRunModel:
                 print(f"    Observed file: {observed_file}")
                 
         except Exception as e:
-            print(f"❌ Error during gauge discovery: {e}")
+            print(f"[ERROR] Error during gauge discovery: {e}")
             gauge_discovery['error'] = str(e)
         
         return gauge_discovery
@@ -1059,7 +1059,7 @@ class Step6ValidateRunModel:
                     
                 else:
                     # Use primary station data
-                    print("✅ Using primary station data from Climate/Hydro step")
+                    print("[OK] Using primary station data from Climate/Hydro step")
                     observed_data_file = gauge_discovery['observed_files'][0]
                     selected_station = gauge_discovery['station_data'].get('selected_station', {})
                     station_id = selected_station.get('id', 'auto_discovered')

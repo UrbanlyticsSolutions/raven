@@ -1122,9 +1122,10 @@ def lake_processing(outlet_coords: str,
         if 'SubId' not in subbasin_data.columns:
             subbasin_data['SubId'] = range(1, len(subbasin_data) + 1)
         
-        if 'DowSubId' not in subbasin_data.columns:
-            # Extract real routing connectivity from Step 2 results
-            subbasin_data['DowSubId'] = _extract_real_routing_connectivity(subbasin_data, step2_results)
+        # ALWAYS extract and apply real routing connectivity from Step 2 results
+        # This overwrites any existing DowSubId values with the correct routing topology
+        logger.info("Extracting routing connectivity from Step 2 results...")
+        subbasin_data['DowSubId'] = _extract_real_routing_connectivity(subbasin_data, step2_results)
         
         if 'DrainArea' not in subbasin_data.columns:
             # Calculate drainage area from geometry
@@ -1395,17 +1396,42 @@ def _extract_real_routing_connectivity(subbasin_data: gpd.GeoDataFrame, step2_re
         # Method 1: Extract from Step 2 routing topology if available
         if 'routing_topology' in step2_results:
             topology = step2_results['routing_topology']
-            if 'network_connections' in topology:
-                network_connections = topology['network_connections']
+            logger.info(f"Found Step 2 routing topology with keys: {list(topology.keys())}")
+            
+            # Extract network_connections from topology (handle nested structure)
+            network_connections = topology.get('network_connections', {})
+            
+            # Handle double-nested structure: routing_topology.network_connections.network_connections
+            if isinstance(network_connections, dict) and 'network_connections' in network_connections:
+                logger.info("Found double-nested network_connections structure")
+                network_connections = network_connections['network_connections']
+            
+            if network_connections:
+                logger.info(f"Found Step 2 routing network with {len(network_connections)} connections")
+                logger.info(f"Sample connections: {dict(list(network_connections.items())[:3])}")
                 
+                # Map SubIds to downstream SubIds
                 for idx, row in subbasin_data.iterrows():
-                    subid = row.get('SubId', idx + 1)
+                    subid = int(row.get('SubId', idx + 1))  # Keep as int
+                    
+                    # Try both int and string keys for lookup
+                    downstream = None
                     if subid in network_connections:
                         downstream = network_connections[subid]
-                        if downstream and downstream > 0:
-                            dowsubids.iloc[idx] = downstream
+                    elif str(subid) in network_connections:
+                        downstream = network_connections[str(subid)]
+                    
+                    if downstream is not None:
+                        if downstream == -1:
+                            dowsubids.iloc[idx] = -1  # Outlet subbasin
+                        elif downstream and int(downstream) > 0:
+                            dowsubids.iloc[idx] = int(downstream)
+                        else:
+                            dowsubids.iloc[idx] = -1  # Default to outlet
                 
-                logger.info(f"Extracted routing connectivity from Step 2 topology: {len([x for x in dowsubids if x > 0])} connections")
+                connected_count = len([x for x in dowsubids if x != -1])
+                outlet_count = len([x for x in dowsubids if x == -1])
+                logger.info(f"Applied Step 2 routing topology: {connected_count} connections, {outlet_count} outlets")
                 return dowsubids
         
         # Method 2: Extract from subbasin shapefile if it has routing attributes
