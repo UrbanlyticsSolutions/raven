@@ -61,7 +61,9 @@
       "Bash(PYTHONPATH=.. python ../workflows/project_steps/step5_raven_model/step5_raven_model.py 49.5738 -119.0368 --workspace-dir .)",
       "Bash(PYTHONPATH=.. python ../workflows/project_steps/step5_raven_model/step5_raven_model.py 49.5738 -119.0368 --workspace-dir . --outlet-name outlet_49.5738_-119.0368)",
       "Bash(\"E:\\python\\Raven\\RavenHydroFramework\\build\\Release\\Raven.exe\" outlet_49.5738_-119.0368 -v 2 -o output)",
-      "Bash(\"E:\\python\\Raven\\RavenHydroFramework\\build\\Release\\Raven.exe\" outlet_49.5738_-119.0368_test -o output)"
+      "Bash(\"E:\\python\\Raven\\RavenHydroFramework\\build\\Release\\Raven.exe\" outlet_49.5738_-119.0368_test -o output)",
+      "Bash(PYTHONPATH=. python:*)",
+      "Bash(PYTHONPATH=.. python:*)"
     ],
     "deny": []
   }

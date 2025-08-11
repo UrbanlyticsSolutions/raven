@@ -1,0 +1,16 @@
+checksum: fbff1ea5d78f0709584a094fc41c53fd72151e1dd0aa1e63f9cf9645d30597f3
+coordinate_system: null
+creation_date: '2025-08-11T05:12:37.700491'
+file_path: E:\python\Raven\test_outlet\step1_results.json
+file_size_bytes: 69639
+processing_steps:
+- input_files: []
+  output_files:
+  - E:\python\Raven\test_outlet\step1_results.json
+  parameters: {}
+  processing_time_seconds: 0.0
+  software_version: BaseWorkflowStep
+  step_name: step1_data_preparation
+  timestamp: '2025-08-11T05:12:37.700491'
+source: Results from step1_data_preparation
+spatial_extent: null

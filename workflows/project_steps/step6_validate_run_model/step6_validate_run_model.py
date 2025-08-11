@@ -29,6 +29,8 @@ Usage Examples:
 """
 
 import sys
+import os
+import shutil
 from pathlib import Path
 import argparse
 import json
@@ -1723,8 +1725,9 @@ class Step6ValidateRunModel:
             # Copy model files to calibration directory
             self._setup_calibration_files(model_dir, calibration_dir, model_name)
             
-            # Use actual observation data from hydrometric directory
-            obs_data_prepared = self._prepare_actual_observed_data(calibration_dir, model_dir.parent, station_id)
+            # Use actual observation data from hydrometric directory (go up to watershed root)
+            watershed_dir = model_dir.parent.parent.parent  # models/files/outlet -> models/files -> models -> watershed_root
+            obs_data_prepared = self._prepare_actual_observed_data(calibration_dir, watershed_dir, station_id)
             if not obs_data_prepared['success']:
                 calibration_result['error'] = f"Failed to prepare observed data: {obs_data_prepared['error']}"
                 return calibration_result

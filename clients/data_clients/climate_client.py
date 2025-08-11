@@ -11,8 +11,12 @@ import json
 import numpy as np
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 import warnings
+import xarray as xr
+import rasterio
+from rasterio.warp import transform_bounds, reproject
+from rasterio.enums import Resampling
 warnings.filterwarnings('ignore')
 
 class ClimateDataClient:
@@ -24,6 +28,8 @@ class ClimateDataClient:
             'User-Agent': 'RAVEN-Hydrological-Model-Client/1.0'
         })
         self.eccc_base_url = "https://api.weather.gc.ca"
+        self.daymet_base_url = "https://thredds.daac.ornl.gov/thredds/dodsC/ornldaac"
+        self.capa_base_url = "https://dd.weather.gc.ca/model_gem_regional"
     
     def get_climate_stations_for_watershed(self, bbox: Tuple[float, float, float, float], 
                                           output_path: Optional[Path] = None, 
@@ -845,3 +851,302 @@ class ClimateDataClient:
         # Daily freeze-thaw: min < 0 and max > 0
         freeze_thaw_days = ((df['TEMP_MIN'] < 0) & (df['TEMP_MAX'] > 0)).sum()
         return int(freeze_thaw_days)
+    
+    # ============================================================================
+    # DAYMET DATA METHODS
+    # ============================================================================
+    
+    def get_daymet_data(self, latitude: float, longitude: float, 
+                       start_year: int = 1991, end_year: int = 2020,
+                       output_path: Optional[Path] = None,
+                       format_type: str = 'ravenpy') -> Dict:
+        """
+        Get Daymet gridded climate data for a specific location
+        
+        Args:
+            latitude: Latitude of target point
+            longitude: Longitude of target point  
+            start_year: Start year for data (1980-2023)
+            end_year: End year for data (1980-2023)
+            output_path: Path to save CSV output
+            format_type: Output format ('ravenpy' or 'standard')
+            
+        Returns:
+            Dict with success status and file information
+        """
+        print(f"Getting Daymet data for ({latitude}, {longitude})")
+        print(f"Years: {start_year}-{end_year}")
+        
+        try:
+            # Use Daymet Single Pixel API (more reliable than OPeNDAP)
+            api_url = "https://daymet.ornl.gov/single-pixel/api/data"
+            
+            # Prepare parameters for API call
+            params = {
+                'lat': latitude,
+                'lon': longitude,
+                'vars': 'tmax,tmin,prcp',  # temperature max/min and precipitation
+                'start': start_year,
+                'end': end_year,
+                'format': 'csv'
+            }
+            
+            print("  Requesting data from Daymet Single Pixel API...")
+            response = self.session.get(api_url, params=params, timeout=120)
+            
+            if response.status_code != 200:
+                return {'success': False, 'error': f'API request failed with status {response.status_code}: {response.text}'}
+            
+            # Parse CSV response
+            from io import StringIO
+            
+            # Skip metadata lines and find CSV header
+            lines = response.text.split('\n')
+            data_start_idx = 0
+            for i, line in enumerate(lines):
+                if line.strip() and 'year,yday,' in line.lower():
+                    data_start_idx = i
+                    break
+            
+            if data_start_idx == 0:
+                return {'success': False, 'error': 'Could not find CSV header in API response'}
+            
+            # Create DataFrame from CSV data
+            clean_csv = '\n'.join(lines[data_start_idx:])
+            combined_df = pd.read_csv(StringIO(clean_csv))
+            
+            # Handle column name variations
+            column_mapping = {}
+            for col in combined_df.columns:
+                col_lower = col.lower()
+                if 'tmax' in col_lower or 'temp' in col_lower and 'max' in col_lower:
+                    column_mapping[col] = 'TEMP_MAX'
+                elif 'tmin' in col_lower or 'temp' in col_lower and 'min' in col_lower:
+                    column_mapping[col] = 'TEMP_MIN'
+                elif 'prcp' in col_lower or 'precip' in col_lower or 'precipitation' in col_lower:
+                    column_mapping[col] = 'PRECIP'
+            
+            # Rename columns
+            combined_df.rename(columns=column_mapping, inplace=True)
+            
+            # Create date column from year and day of year
+            if 'year' in combined_df.columns and 'yday' in combined_df.columns:
+                combined_df['date'] = pd.to_datetime(
+                    combined_df['year'].astype(str) + '-01-01'
+                ) + pd.to_timedelta(combined_df['yday'] - 1, unit='days')
+                combined_df.set_index('date', inplace=True)
+                
+                # Remove year and yday columns
+                combined_df.drop(['year', 'yday'], axis=1, inplace=True, errors='ignore')
+            
+            # Verify required columns
+            required_cols = ['TEMP_MAX', 'TEMP_MIN', 'PRECIP'] 
+            missing_cols = [col for col in required_cols if col not in combined_df.columns]
+            if missing_cols:
+                return {'success': False, 'error': f'Missing required columns: {missing_cols}'}
+            
+            print(f"  Successfully retrieved {len(combined_df)} daily records")
+            
+            # Sort by date
+            combined_df.sort_index(inplace=True)
+            
+            # Calculate statistics
+            stats = {
+                'total_precipitation_mm': float(combined_df['PRECIP'].sum()),
+                'mean_annual_precipitation_mm': float(combined_df['PRECIP'].sum() / (end_year - start_year + 1)),
+                'mean_temp_max': float(combined_df['TEMP_MAX'].mean()),
+                'mean_temp_min': float(combined_df['TEMP_MIN'].mean()),
+                'max_daily_precip_mm': float(combined_df['PRECIP'].max()),
+                'record_count': len(combined_df)
+            }
+            
+            # Save to file if requested
+            if output_path:
+                if format_type == 'ravenpy':
+                    self._save_ravenpy_format(combined_df, output_path, latitude, longitude, 'Daymet')
+                else:
+                    combined_df.to_csv(output_path)
+                print(f"SUCCESS: Daymet data saved to {output_path}")
+            
+            return {
+                'success': True,
+                'file_path': str(output_path) if output_path else None,
+                'data_source': 'Daymet_v4_Single_Pixel_API',
+                'location': {'latitude': latitude, 'longitude': longitude},
+                'period': {'start_year': start_year, 'end_year': end_year},
+                'records': len(combined_df),
+                'date_range': [combined_df.index.min().strftime('%Y-%m-%d'), 
+                              combined_df.index.max().strftime('%Y-%m-%d')],
+                'statistics': stats
+            }
+            
+        except Exception as e:
+            error_msg = f"Daymet data retrieval failed: {str(e)}"
+            print(f"ERROR: {error_msg}")
+            return {'success': False, 'error': error_msg}
+    
+    # ============================================================================
+    # CAPA/RDPA DATA METHODS  
+    # ============================================================================
+    
+    def get_capa_data(self, latitude: float, longitude: float,
+                     start_date: str = "2011-01-01", end_date: str = "2023-12-31", 
+                     output_path: Optional[Path] = None,
+                     format_type: str = 'ravenpy') -> Dict:
+        """
+        Get CAPA (Canadian Precipitation Analysis) gridded data
+        
+        Args:
+            latitude: Latitude of target point
+            longitude: Longitude of target point
+            start_date: Start date (YYYY-MM-DD) - earliest available: 2011-01-01
+            end_date: End date (YYYY-MM-DD)
+            output_path: Path to save CSV output
+            format_type: Output format ('ravenpy' or 'standard')
+            
+        Returns:
+            Dict with success status and file information
+        """
+        print(f"Getting CAPA data for ({latitude}, {longitude})")
+        print(f"Date range: {start_date} to {end_date}")
+        print("WARNING: CAPA data requires specialized access - this is a template implementation")
+        
+        try:
+            # Note: CAPA data access typically requires:
+            # 1. Access to MSC Datamart via AMQP or HTTP
+            # 2. Authentication for historical archives
+            # 3. Processing of GRIB2 format files
+            
+            # This is a template - actual implementation would need:
+            # - Authentication setup
+            # - GRIB2 file processing capabilities  
+            # - MSC Datamart file navigation
+            
+            print("CAPA data access requires:")
+            print("1. MSC Datamart credentials/access")
+            print("2. GRIB2 processing libraries (e.g., xarray with cfgrib)")
+            print("3. Historical archive access (30-day rolling window for real-time)")
+            
+            # Template for actual implementation:
+            # 1. Authenticate with MSC Datamart
+            # 2. Query available CAPA files for date range
+            # 3. Download GRIB2 files
+            # 4. Extract point data for lat/lon
+            # 5. Convert to RavenPy format
+            
+            return {
+                'success': False,
+                'error': 'CAPA implementation requires MSC Datamart access setup',
+                'implementation_notes': {
+                    'data_source': 'MSC Datamart - RDPA/CAPA GRIB2 files',
+                    'access_method': 'HTTP or AMQP subscription',
+                    'format': 'GRIB2',
+                    'resolution': '10km',
+                    'temporal_coverage': '2011-present (30-day rolling window)',
+                    'historical_archive': '2011-2023 (separate access required)'
+                }
+            }
+            
+        except Exception as e:
+            error_msg = f"CAPA data setup failed: {str(e)}"
+            print(f"ERROR: {error_msg}")
+            return {'success': False, 'error': error_msg}
+    
+    # ============================================================================
+    # HELPER METHODS FOR GRIDDED DATA
+    # ============================================================================
+    
+    def _save_ravenpy_format(self, df: pd.DataFrame, output_path: Path, 
+                           lat: float, lon: float, source: str):
+        """Save climate data in RavenPy-compatible format"""
+        
+        # Calculate monthly averages for temperature
+        monthly_temp = df.groupby(df.index.month).agg({
+            'TEMP_MAX': 'mean',
+            'TEMP_MIN': 'mean'
+        }).round(1)
+        
+        monthly_avg_temp = ((monthly_temp['TEMP_MAX'] + monthly_temp['TEMP_MIN']) / 2).values
+        monthly_evap = [30.0] * 12  # Default evaporation
+        
+        # Create RVT format
+        output_path.parent.mkdir(exist_ok=True, parents=True)
+        
+        with open(output_path, 'w') as f:
+            f.write(f"#########################################################################\n")
+            f.write(f"# Climate Data from {source}\n")
+            f.write(f"# Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write(f"#########################################################################\n\n")
+            
+            f.write(f":Gauge\t\t\t\t\tGauge_1\n")
+            f.write(f"\t:Latitude\t\t\t{lat}\n")
+            f.write(f"\t:Longitude\t\t\t{lon}\n")
+            f.write(f"\t:Elevation\t\t\t1800\n")  # Default elevation
+            
+            # Monthly averages
+            f.write(f"\t:MonthlyAveTemperature {' '.join([f'{x:.1f}' for x in monthly_avg_temp])}\n")
+            f.write(f"\t:MonthlyAveEvaporation {' '.join([f'{x:.1f}' for x in monthly_evap])}\n\n")
+            
+            f.write(f":MultiData\n")
+            f.write(f"{df.index.min().strftime('%Y-%m-%d')} 00:00:00 1.0 {len(df)}\n")
+            f.write(f":Parameters,TEMP_MAX,TEMP_MIN,PRECIP\n")
+            f.write(f":Units,C,C,mm/d\n")
+            
+            # Write daily data
+            for idx, row in df.iterrows():
+                f.write(f"{row['TEMP_MAX']:.2f},{row['TEMP_MIN']:.2f},{row['PRECIP']:.2f}\n")
+    
+    def _calculate_data_quality(self, df: pd.DataFrame) -> Dict:
+        """Calculate data quality metrics for gridded data"""
+        total_days = len(df)
+        
+        missing_tmax = df['TEMP_MAX'].isnull().sum()
+        missing_tmin = df['TEMP_MIN'].isnull().sum() 
+        missing_precip = df['PRECIP'].isnull().sum()
+        
+        return {
+            'temp_max_completeness_percent': ((total_days - missing_tmax) / total_days * 100) if total_days > 0 else 0,
+            'temp_min_completeness_percent': ((total_days - missing_tmin) / total_days * 100) if total_days > 0 else 0,
+            'precip_completeness_percent': ((total_days - missing_precip) / total_days * 100) if total_days > 0 else 0,
+            'total_records': total_days,
+            'missing_days': missing_tmax + missing_tmin + missing_precip
+        }
+    
+    # ============================================================================
+    # UNIFIED GRIDDED DATA METHOD
+    # ============================================================================
+    
+    def get_gridded_climate_data(self, latitude: float, longitude: float,
+                                start_date: str = "1991-01-01", end_date: str = "2020-12-31",
+                                source: str = "daymet", output_path: Optional[Path] = None,
+                                format_type: str = 'ravenpy') -> Dict:
+        """
+        Unified method to get gridded climate data from different sources
+        
+        Args:
+            latitude: Latitude of target point
+            longitude: Longitude of target point
+            start_date: Start date (YYYY-MM-DD)  
+            end_date: End date (YYYY-MM-DD)
+            source: Data source ('daymet', 'capa', 'era5')
+            output_path: Path to save output
+            format_type: Output format
+            
+        Returns:
+            Dict with success status and file information
+        """
+        
+        start_year = int(start_date[:4])
+        end_year = int(end_date[:4])
+        
+        if source.lower() == 'daymet':
+            return self.get_daymet_data(latitude, longitude, start_year, end_year, 
+                                      output_path, format_type)
+        elif source.lower() == 'capa':
+            return self.get_capa_data(latitude, longitude, start_date, end_date,
+                                    output_path, format_type)
+        else:
+            return {
+                'success': False, 
+                'error': f'Unsupported gridded data source: {source}. Use "daymet" or "capa".'
+            }

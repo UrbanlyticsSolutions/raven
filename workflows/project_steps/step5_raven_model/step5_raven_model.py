@@ -1680,7 +1680,7 @@ class Step5RAVENModel:
                             bedslope = float(line.split()[1])
                     
                     if channel_name:
-                        # Use default BasinMaker parameters for regeneration
+                        # Use hydraulic geometry for BasinMaker parameters
                         # Extract SubId from channel name (e.g., "CHANNEL_6" -> 6)
                         try:
                             subid = int(channel_name.split('_')[1])
@@ -1688,22 +1688,28 @@ class Step5RAVENModel:
                             subbasin_row = subbasin_gdf[subbasin_gdf['SubId'] == subid]
                             if not subbasin_row.empty:
                                 subbasin = subbasin_row.iloc[0]
-                                width = float(subbasin.get('BkfWidth', 2.0))
-                                depth = float(subbasin.get('BkfDepth', 0.5))
+                                # Calculate bankfull dimensions from drainage area
+                                drainage_area_km2 = float(subbasin.get('DrainArea', 0)) / 1e6  # Convert m² to km²
+                                if drainage_area_km2 <= 0:
+                                    drainage_area_km2 = float(subbasin.get('area_km2', 1.0))
+                                
+                                # Hydraulic geometry relationships
+                                width = max(1.22 * (drainage_area_km2 ** 0.557), 1.0)
+                                depth = max(0.27 * (drainage_area_km2 ** 0.372), 0.3)
                                 elevation = float(subbasin.get('MeanElev', 1000.0))
-                                flood_n = 0.15  # Default floodplain Manning's n
-                                channel_n = 0.06  # Default channel Manning's n
+                                flood_n = 0.15  # Floodplain Manning's n
+                                channel_n = 0.06  # Channel Manning's n
                             else:
-                                # Use defaults if no subbasin data
-                                width = 2.0
-                                depth = 0.5
+                                # Use defaults for drainage area = 1 km²
+                                width = 1.22 * (1.0 ** 0.557)  # ~1.2m
+                                depth = 0.27 * (1.0 ** 0.372)  # ~0.3m
                                 elevation = 1000.0
                                 flood_n = 0.15
                                 channel_n = 0.06
                         except (IndexError, ValueError):
-                            # Use defaults for parsing errors
-                            width = 2.0
-                            depth = 0.5
+                            # Use defaults for parsing errors (drainage area = 1 km²)
+                            width = 1.22 * (1.0 ** 0.557)  # ~1.2m
+                            depth = 0.27 * (1.0 ** 0.372)  # ~0.3m
                             elevation = 1000.0
                             flood_n = 0.15
                             channel_n = 0.06
@@ -1727,12 +1733,26 @@ class Step5RAVENModel:
                     # Only generate profiles for subbasins with sufficient river length (BasinMaker logic)
                     if river_length_km > 0.001:  # BasinMaker length threshold (1m = 0.001km)
                         channel_name = f"Chn_{subid}"
-                        width = float(subbasin.get('BkfWidth', 10.0))
-                        depth = float(subbasin.get('BkfDepth', 2.0))
+                        
+                        # Calculate bankfull dimensions from drainage area (hydraulic geometry)
+                        drainage_area_km2 = float(subbasin.get('DrainArea', 0)) / 1e6  # Convert m² to km²
+                        if drainage_area_km2 <= 0:
+                            drainage_area_km2 = float(subbasin.get('area_km2', 1.0))  # Fallback to area_km2
+                        
+                        # Hydraulic geometry relationships (Leopold & Maddock, 1953)
+                        # Width (m) = 1.22 * (drainage_area_km2)^0.557
+                        # Depth (m) = 0.27 * (drainage_area_km2)^0.372
+                        width = max(1.22 * (drainage_area_km2 ** 0.557), 1.0)  # Minimum 1m width
+                        depth = max(0.27 * (drainage_area_km2 ** 0.372), 0.3)  # Minimum 0.3m depth
+                        
                         slope = max(float(subbasin.get('RivSlope', 0.001)), 0.0001)  # BasinMaker min slope
                         elevation = float(subbasin.get('MeanElev', 1000.0))
-                        flood_n = float(subbasin.get('FloodP_n', 0.1))
-                        channel_n = float(subbasin.get('Ch_n', 0.035))  # BasinMaker default Manning's n
+                        
+                        # BasinMaker Manning's n values
+                        flood_n = 0.15   # Floodplain Manning's n (typical for natural floodplains)
+                        channel_n = 0.06  # Channel Manning's n (typical for natural channels)
+                        
+                        print(f"  Generating channel {channel_name}: DA={drainage_area_km2:.1f}km², W={width:.1f}m, D={depth:.1f}m")
                         
                         # Generate BasinMaker trapezoidal channel profile
                         profile_lines = self._generate_basinmaker_channel_profile(
@@ -1866,8 +1886,11 @@ class Step5RAVENModel:
                         f.write(f"  :MonthlyAveTemperature {temp_str}\n")
                         
                         # Calculate monthly average PET values from climate data dynamically
+                        print("[DEBUG] Calculating monthly PET values...")
                         monthly_pet = self._calculate_monthly_average_pet()
+                        print(f"[DEBUG] Monthly PET values: {monthly_pet}")
                         pet_str = ' '.join([f"{pet:.1f}" for pet in monthly_pet])
+                        print(f"[DEBUG] PET string: {pet_str}")
                         f.write(f"  :MonthlyAveEvaporation {pet_str}\n")
                         
                         f.write(f"  :RedirectToFile ./obs/{obs_file.name}\n")
@@ -1878,99 +1901,93 @@ class Step5RAVENModel:
         return rvt_file
     
     def _calculate_monthly_average_temperatures(self) -> List[float]:
-        """Calculate monthly average temperatures from climate data"""
-        try:
-            # Load climate data
-            climate_df = self._load_climate_data()
-            if climate_df is None or climate_df.empty:
-                # Fallback to Canadian default values if no climate data
-                return [-8.5, -6.2, -1.4, 5.8, 12.1, 16.8, 19.2, 18.1, 13.2, 6.8, -1.2, -6.4]
-            
-            # Calculate average of TEMP_MAX and TEMP_MIN to get mean temperature
-            if 'TEMP_MAX' in climate_df.columns and 'TEMP_MIN' in climate_df.columns:
-                climate_df['TEMP_MEAN'] = (climate_df['TEMP_MAX'] + climate_df['TEMP_MIN']) / 2.0
-            elif 'TEMP_AVG' in climate_df.columns:
-                climate_df['TEMP_MEAN'] = climate_df['TEMP_AVG']
-            elif 'TEMP' in climate_df.columns:
-                climate_df['TEMP_MEAN'] = climate_df['TEMP']
+        """Calculate monthly average temperatures from climate data - FAIL FAST approach"""
+        # Load climate data - REQUIRED
+        climate_df = self._load_climate_data()
+        if climate_df is None or climate_df.empty:
+            raise ValueError("FAIL FAST: No climate data available - cannot calculate temperatures without climate data")
+        
+        # Calculate average of TEMP_MAX and TEMP_MIN to get mean temperature
+        if 'TEMP_MAX' in climate_df.columns and 'TEMP_MIN' in climate_df.columns:
+            climate_df['TEMP_MEAN'] = (climate_df['TEMP_MAX'] + climate_df['TEMP_MIN']) / 2.0
+        elif 'TEMP_AVG' in climate_df.columns:
+            climate_df['TEMP_MEAN'] = climate_df['TEMP_AVG']
+        elif 'TEMP' in climate_df.columns:
+            climate_df['TEMP_MEAN'] = climate_df['TEMP']
+        else:
+            raise ValueError("FAIL FAST: Climate data must contain temperature columns (TEMP_MAX/TEMP_MIN, TEMP_AVG, or TEMP)")
+        
+        # Group by month and calculate averages
+        climate_df['month'] = climate_df.index.month
+        monthly_averages = climate_df.groupby('month')['TEMP_MEAN'].mean()
+        
+        # Ensure we have 12 months - FAIL FAST if missing critical months
+        monthly_temps = []
+        missing_months = []
+        for month in range(1, 13):
+            if month in monthly_averages.index:
+                monthly_temps.append(float(monthly_averages[month]))
             else:
-                # No temperature data available, use defaults
-                return [-8.5, -6.2, -1.4, 5.8, 12.1, 16.8, 19.2, 18.1, 13.2, 6.8, -1.2, -6.4]
-            
-            # Group by month and calculate averages
-            climate_df['month'] = climate_df.index.month
-            monthly_averages = climate_df.groupby('month')['TEMP_MEAN'].mean()
-            
-            # Ensure we have 12 months (fill missing months with interpolated values)
-            monthly_temps = []
-            for month in range(1, 13):
-                if month in monthly_averages.index:
-                    monthly_temps.append(float(monthly_averages[month]))
-                else:
-                    # Interpolate missing months
-                    prev_month = month - 1 if month > 1 else 12
-                    next_month = month + 1 if month < 12 else 1
-                    prev_temp = monthly_averages.get(prev_month, 0.0)
-                    next_temp = monthly_averages.get(next_month, 0.0)
-                    monthly_temps.append((prev_temp + next_temp) / 2.0)
-            
-            return monthly_temps
-            
-        except Exception as e:
-            print(f"Warning: Could not calculate monthly temperatures from climate data: {e}")
-            # Return Canadian default values as fallback
-            return [-8.5, -6.2, -1.4, 5.8, 12.1, 16.8, 19.2, 18.1, 13.2, 6.8, -1.2, -6.4]
+                missing_months.append(month)
+        
+        if missing_months:
+            raise ValueError(f"FAIL FAST: Missing temperature data for months {missing_months} - cannot interpolate in fail-fast mode")
+        
+        return monthly_temps
     
     def _calculate_monthly_average_pet(self) -> List[float]:
-        """Calculate monthly average PET values from climate data or estimate from temperature"""
-        try:
-            # Load climate data
-            climate_df = self._load_climate_data()
-            if climate_df is None or climate_df.empty:
-                # Fallback to Canadian default PET values if no climate data
-                return [15.0, 20.0, 35.0, 60.0, 90.0, 110.0, 120.0, 105.0, 75.0, 45.0, 25.0, 15.0]
+        """Calculate monthly average PET values from climate data - FAIL FAST approach"""
+        # Load climate data - REQUIRED
+        climate_df = self._load_climate_data()
+        if climate_df is None or climate_df.empty:
+            raise ValueError("FAIL FAST: No climate data available - cannot calculate PET without climate data")
+        
+        # Check if PET is directly available in climate data
+        if 'PET' in climate_df.columns:
+            climate_df['month'] = climate_df.index.month
+            monthly_pet = climate_df.groupby('month')['PET'].mean()
+        elif 'POTENTIAL_ET' in climate_df.columns:
+            climate_df['month'] = climate_df.index.month
+            monthly_pet = climate_df.groupby('month')['POTENTIAL_ET'].mean()
+        else:
+            # Estimate PET from temperature data using Hargreaves method
+            if 'TEMP_MAX' not in climate_df.columns or 'TEMP_MIN' not in climate_df.columns:
+                raise ValueError("FAIL FAST: Climate data must contain either PET/POTENTIAL_ET or TEMP_MAX/TEMP_MIN columns")
             
-            # Check if PET is directly available in climate data
-            if 'PET' in climate_df.columns:
-                climate_df['month'] = climate_df.index.month
-                monthly_pet = climate_df.groupby('month')['PET'].mean()
-            elif 'POTENTIAL_ET' in climate_df.columns:
-                climate_df['month'] = climate_df.index.month
-                monthly_pet = climate_df.groupby('month')['POTENTIAL_ET'].mean()
-            else:
-                # Estimate PET from temperature data using simplified Hargreaves method
-                # PET ≈ 0.0023 × (Tmean + 17.8) × sqrt(Tmax - Tmin) × Ra
-                # For monthly averages, use simplified approach: PET ≈ max(0, Tmean × 2.5)
-                monthly_temps = self._calculate_monthly_average_temperatures()
-                monthly_pet_values = []
-                
-                # Simple temperature-based PET estimation (mm/month)
-                seasonal_factors = [0.5, 0.7, 1.2, 2.0, 3.2, 4.0, 4.5, 3.8, 2.5, 1.5, 0.8, 0.5]  # Winter low, summer high
-                for i, temp in enumerate(monthly_temps):
-                    base_pet = max(0, temp * 2.5) * seasonal_factors[i]
-                    monthly_pet_values.append(base_pet)
-                
-                return monthly_pet_values
-            
-            # Ensure we have 12 months and convert to list
+            # Calculate monthly average temperatures FIRST (required for PET)
+            monthly_temps = self._calculate_monthly_average_temperatures()
             monthly_pet_values = []
-            for month in range(1, 13):
-                if month in monthly_pet.index:
-                    monthly_pet_values.append(float(monthly_pet[month]))
+            
+            # Temperature-based PET estimation using Hargreaves method (mm/month)
+            # PET = 0.0023 × (Tmean + 17.8) × sqrt(Tmax - Tmin) × Ra × days_in_month
+            seasonal_radiation_factors = [0.5, 0.7, 1.2, 2.0, 3.2, 4.0, 4.5, 3.8, 2.5, 1.5, 0.8, 0.5]  # Approximates solar radiation variation
+            days_in_month = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+            
+            for i, temp_mean in enumerate(monthly_temps):
+                if temp_mean <= -10:  # Very cold months - minimal PET
+                    base_pet = 0.5
                 else:
-                    # Interpolate missing months
-                    prev_month = month - 1 if month > 1 else 12
-                    next_month = month + 1 if month < 12 else 1
-                    prev_pet = monthly_pet.get(prev_month, 50.0)
-                    next_pet = monthly_pet.get(next_month, 50.0)
-                    monthly_pet_values.append((prev_pet + next_pet) / 2.0)
+                    # Hargreaves-like formula: PET ≈ 0.0023 × (Tmean + 17.8) × Ra_factor × days
+                    base_pet = 0.0023 * (temp_mean + 17.8) * seasonal_radiation_factors[i] * days_in_month[i]
+                    base_pet = max(0.1, base_pet)  # Minimum 0.1 mm/month
+                
+                monthly_pet_values.append(base_pet)
             
             return monthly_pet_values
-            
-        except Exception as e:
-            print(f"Warning: Could not calculate monthly PET from climate data: {e}")
-            # Return Canadian default PET values as fallback (mm/month)
-            return [15.0, 20.0, 35.0, 60.0, 90.0, 110.0, 120.0, 105.0, 75.0, 45.0, 25.0, 15.0]
+        
+        # Ensure we have 12 months - FAIL FAST if missing critical months
+        monthly_pet_values = []
+        missing_months = []
+        for month in range(1, 13):
+            if month in monthly_pet.index:
+                monthly_pet_values.append(float(monthly_pet[month]))
+            else:
+                missing_months.append(month)
+        
+        if missing_months:
+            raise ValueError(f"FAIL FAST: Missing PET data for months {missing_months} - cannot interpolate in fail-fast mode")
+        
+        return monthly_pet_values
     
 
     def _generate_lakes_rvh_if_needed(self, hru_gdf: gpd.GeoDataFrame, outlet_name: str) -> Optional[Path]:
