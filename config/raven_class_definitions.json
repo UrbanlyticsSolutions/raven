@@ -1,0 +1,672 @@
+{
+  "simulation": {
+    "start_date": "2002-10-01 00:00:00",
+    "end_date": "2004-09-30 00:00:00", 
+    "timestep": 1.0,
+    "method": "ORDERED_SERIES"
+  },
+  
+  "model_config": {
+    "soil_model": "SOIL_MULTILAYER",
+    "soil_layers": 3,
+    "routing": "ROUTE_HYDROLOGIC",
+    "evaporation": "PET_HARGREAVES_1985",
+    "rain_snow_fraction": "RAINSNOW_HBV",
+    "potential_melt_method": "POTMELT_HBV"
+  },
+  
+  "aliases": {
+    "FAST_RESERVOIR": "SOIL[1]",
+    "SLOW_RESERVOIR": "SOIL[2]"
+  },
+  
+  "hydrologic_processes": [
+    {
+      "name": "SnowRefreeze",
+      "method": "FREEZE_DEGREE_DAY", 
+      "from": "SNOW_LIQ",
+      "to": "SNOW"
+    },
+    {
+      "name": "Precipitation",
+      "method": "PRECIP_RAVEN",
+      "from": "ATMOS_PRECIP", 
+      "to": "MULTIPLE"
+    },
+    {
+      "name": "SnowBalance",
+      "method": "SNOBAL_SIMPLE_MELT",
+      "from": "SNOW",
+      "to": "SNOW_LIQ",
+      "overflow": {
+        "method": "RAVEN_DEFAULT",
+        "from": "SNOW_LIQ",
+        "to": "PONDED_WATER"
+      }
+    },
+    {
+      "name": "Infiltration", 
+      "method": "INF_HBV",
+      "from": "PONDED_WATER",
+      "to": "MULTIPLE"
+    },
+    {
+      "name": "SoilEvaporation",
+      "method": "SOILEVAP_HBV",
+      "from": "SOIL[0]",
+      "to": "ATMOSPHERE" 
+    },
+    {
+      "name": "CapillaryRise",
+      "method": "CRISE_HBV", 
+      "from": "FAST_RESERVOIR",
+      "to": "SOIL[0]"
+    },
+    {
+      "name": "Percolation",
+      "method": "PERC_CONSTANT",
+      "from": "FAST_RESERVOIR",
+      "to": "SLOW_RESERVOIR"
+    },
+    {
+      "name": "Baseflow",
+      "method": "BASE_POWER_LAW",
+      "from": "FAST_RESERVOIR", 
+      "to": "SURFACE_WATER"
+    },
+    {
+      "name": "Baseflow",
+      "method": "BASE_LINEAR",
+      "from": "SLOW_RESERVOIR",
+      "to": "SURFACE_WATER"
+    }
+  ],
+  
+  "channel_profile": {
+    "name": "DEFAULT_CHANNEL",
+    "bedslope": 0.001,
+    "survey_points": [[0, 5], [55, 0], [65, 0], [120, 5]],
+    "roughness_zones": [[0, 0.035]]
+  },
+  
+  "default_coordinates": {
+    "elevation": 1000.0,
+    "latitude": 50.0,
+    "longitude": -120.0,
+    "slope": 5.0,
+    "aspect": 180.0
+  },
+  
+  "subbasin_routing": {
+    "downstream_id": -1,
+    "channel_profile": "DEFAULT_CHANNEL",
+    "reach_length": 1.0,
+    "gauged": 0
+  },
+  
+  "default_terrain_classes": {
+    "aquifer": "DEFAULT_AQUIFER",
+    "terrain": "DEFAULT_TERRAIN"
+  },
+  
+  "default_classes": {
+    "landuse": "FOREST",
+    "vegetation": "CONIFEROUS", 
+    "soil": "LOAM"
+  },
+  
+  "vegetation_classes": {
+    "CONIFEROUS": {
+      "MAX_HT": 25,
+      "MAX_LAI": 5.0,
+      "MAX_LEAF_COND": 5.0,
+      "parameters": {
+        "SAI_HT_RATIO": 0.0,
+        "MAX_CAPACITY": 16.26,
+        "MAX_SNOW_CAPACITY": 6.68,
+        "RAIN_ICEPT_FACT": 0.05,
+        "SNOW_ICEPT_FACT": 0.05,
+        "RAIN_ICEPT_PCT": 0.05,
+        "SNOW_ICEPT_PCT": 0.05,
+        "TFRAIN": 0.88,
+        "TFSNOW": 0.88
+      }
+    },
+    "CONIFEROUS_FOREST": {
+      "MAX_HT": 25,
+      "MAX_LAI": 5.0,
+      "MAX_LEAF_COND": 5.0,
+      "parameters": {
+        "SAI_HT_RATIO": 0.0,
+        "MAX_CAPACITY": 16.26,
+        "MAX_SNOW_CAPACITY": 6.68,
+        "RAIN_ICEPT_FACT": 0.05,
+        "SNOW_ICEPT_FACT": 0.05,
+        "RAIN_ICEPT_PCT": 0.05,
+        "SNOW_ICEPT_PCT": 0.05,
+        "TFRAIN": 0.88,
+        "TFSNOW": 0.88
+      }
+    },
+    "MIXED_SHRUBLAND": {
+      "MAX_HT": 5,
+      "MAX_LAI": 3.0,
+      "MAX_LEAF_COND": 5.0,
+      "parameters": {
+        "SAI_HT_RATIO": 0.0,
+        "MAX_CAPACITY": 10.0,
+        "MAX_SNOW_CAPACITY": 5.0,
+        "RAIN_ICEPT_FACT": 0.05,
+        "SNOW_ICEPT_FACT": 0.05,
+        "RAIN_ICEPT_PCT": 0.05,
+        "SNOW_ICEPT_PCT": 0.05,
+        "TFRAIN": 0.88,
+        "TFSNOW": 0.88
+      }
+    },
+    "GRASSLAND": {
+      "MAX_HT": 3,
+      "MAX_LAI": 4.0,
+      "MAX_LEAF_COND": 5.0,
+      "parameters": {
+        "SAI_HT_RATIO": 0.0,
+        "MAX_CAPACITY": 16.26,
+        "MAX_SNOW_CAPACITY": 6.68,
+        "RAIN_ICEPT_FACT": 0.05,
+        "SNOW_ICEPT_FACT": 0.05,
+        "RAIN_ICEPT_PCT": 0.05,
+        "SNOW_ICEPT_PCT": 0.05,
+        "TFRAIN": 0.95,
+        "TFSNOW": 0.95
+      }
+    },
+    "GRASSLAND_VEG": {
+      "MAX_HT": 3,
+      "MAX_LAI": 4.0,
+      "MAX_LEAF_COND": 5.0,
+      "parameters": {
+        "SAI_HT_RATIO": 0.0,
+        "MAX_CAPACITY": 16.26,
+        "MAX_SNOW_CAPACITY": 6.68,
+        "RAIN_ICEPT_FACT": 0.05,
+        "SNOW_ICEPT_FACT": 0.05,
+        "RAIN_ICEPT_PCT": 0.05,
+        "SNOW_ICEPT_PCT": 0.05,
+        "TFRAIN": 0.95,
+        "TFSNOW": 0.95
+      }
+    },
+    "FOREST": {
+      "MAX_HT": 25,
+      "MAX_LAI": 5.0,
+      "MAX_LEAF_COND": 5.0,
+      "parameters": {
+        "SAI_HT_RATIO": 0.0,
+        "MAX_CAPACITY": 16.26,
+        "MAX_SNOW_CAPACITY": 6.68,
+        "RAIN_ICEPT_FACT": 0.05,
+        "SNOW_ICEPT_FACT": 0.05,
+        "RAIN_ICEPT_PCT": 0.05,
+        "SNOW_ICEPT_PCT": 0.05,
+        "TFRAIN": 0.88,
+        "TFSNOW": 0.88
+      }
+    },
+    "WATER": {
+      "MAX_HT": 0,
+      "MAX_LAI": 0.0,
+      "MAX_LEAF_COND": 0.0,
+      "parameters": {
+        "SAI_HT_RATIO": 0.0,
+        "MAX_CAPACITY": 0.0,
+        "MAX_SNOW_CAPACITY": 0.0,
+        "RAIN_ICEPT_FACT": 0.0,
+        "SNOW_ICEPT_FACT": 0.0,
+        "RAIN_ICEPT_PCT": 0.0,
+        "SNOW_ICEPT_PCT": 0.0,
+        "TFRAIN": 0.0,
+        "TFSNOW": 0.0
+      }
+    }
+  },
+  
+  "landuse_classes": {
+    "FOREST": {
+      "IMPERM": 0.0,
+      "FOREST_COV": 1.0,
+      "MELT_FACTOR": 4.5,
+      "REFREEZE_FACTOR": 4.5,
+      "snow_parameters": {
+        "HBV_MELT_FOR_CORR": 0.68
+      }
+    },
+    "FOREST_CONIFEROUS": {
+      "IMPERM": 0.0,
+      "FOREST_COV": 1.0,
+      "MELT_FACTOR": 4.5,
+      "REFREEZE_FACTOR": 4.5,
+      "snow_parameters": {
+        "HBV_MELT_FOR_CORR": 0.68
+      }
+    },
+    "FOREST_DECIDUOUS": {
+      "IMPERM": 0.0,
+      "FOREST_COV": 1.0,
+      "MELT_FACTOR": 5.0,
+      "REFREEZE_FACTOR": 5.0,
+      "snow_parameters": {
+        "HBV_MELT_FOR_CORR": 0.68
+      }
+    },
+    "FOREST_MIXED": {
+      "IMPERM": 0.0,
+      "FOREST_COV": 1.0,
+      "MELT_FACTOR": 4.8,
+      "REFREEZE_FACTOR": 4.8,
+      "snow_parameters": {
+        "HBV_MELT_FOR_CORR": 0.68
+      }
+    },
+    "AGRICULTURE": {
+      "IMPERM": 0.0,
+      "FOREST_COV": 0.05,
+      "MELT_FACTOR": 5.5,
+      "REFREEZE_FACTOR": 5.5
+    },
+    "URBAN": {
+      "IMPERM": 0.3,
+      "FOREST_COV": 0.1,
+      "MELT_FACTOR": 6.0,
+      "REFREEZE_FACTOR": 6.0
+    },
+    "SHRUBLAND": {
+      "IMPERM": 0.0,
+      "FOREST_COV": 0.3,
+      "MELT_FACTOR": 5.2,
+      "REFREEZE_FACTOR": 5.2,
+      "snow_parameters": {
+        "HBV_MELT_FOR_CORR": 0.68
+      }
+    },
+    "GRASSLAND": {
+      "IMPERM": 0.0,
+      "FOREST_COV": 0.1,
+      "MELT_FACTOR": 5.8,
+      "REFREEZE_FACTOR": 5.8
+    },
+    "BARREN": {
+      "IMPERM": 0.0,
+      "FOREST_COV": 0.0,
+      "MELT_FACTOR": 6.5,
+      "REFREEZE_FACTOR": 6.5
+    },
+    "WATER": {
+      "IMPERM": 0.0,
+      "FOREST_COV": 0.0,
+      "MELT_FACTOR": 7.0,
+      "REFREEZE_FACTOR": 7.0
+    },
+    "WETLAND": {
+      "IMPERM": 0.0,
+      "FOREST_COV": 0.3,
+      "MELT_FACTOR": 5.5,
+      "REFREEZE_FACTOR": 5.5,
+      "snow_parameters": {
+        "HBV_MELT_FOR_CORR": 0.68
+      }
+    },
+    "LAKE": {
+      "IMPERM": 0.0,
+      "FOREST_COV": 0.0,
+      "MELT_FACTOR": 7.0,
+      "REFREEZE_FACTOR": 7.0
+    }
+  },
+  
+  "soil_classes": {
+    "LOAM_TOP": {
+      "SAND": 0.4,
+      "CLAY": 0.4,
+      "SILT": 0.2,
+      "ORGANIC": 0.0
+    },
+    "LOAM_FAST": {
+      "SAND": 0.4,
+      "CLAY": 0.4,
+      "SILT": 0.2,
+      "ORGANIC": 0.0
+    },
+    "LOAM_SLOW": {
+      "SAND": 0.4,
+      "CLAY": 0.4,
+      "SILT": 0.2,
+      "ORGANIC": 0.0
+    },
+    "SANDY_LOAM_TOP": {
+      "SAND": 0.6,
+      "CLAY": 0.2,
+      "SILT": 0.2,
+      "ORGANIC": 0.0
+    },
+    "SANDY_LOAM_FAST": {
+      "SAND": 0.6,
+      "CLAY": 0.2,
+      "SILT": 0.2,
+      "ORGANIC": 0.0
+    },
+    "SANDY_LOAM_SLOW": {
+      "SAND": 0.6,
+      "CLAY": 0.2,
+      "SILT": 0.2,
+      "ORGANIC": 0.0
+    },
+    "SILTY_CLAY_LOAM_TOP": {
+      "SAND": 0.2,
+      "CLAY": 0.4,
+      "SILT": 0.4,
+      "ORGANIC": 0.0
+    },
+    "SILTY_CLAY_LOAM_FAST": {
+      "SAND": 0.2,
+      "CLAY": 0.4,
+      "SILT": 0.4,
+      "ORGANIC": 0.0
+    },
+    "SILTY_CLAY_LOAM_SLOW": {
+      "SAND": 0.2,
+      "CLAY": 0.4,
+      "SILT": 0.4,
+      "ORGANIC": 0.0
+    },
+    "WATER_TOP": {
+      "SAND": 0.0,
+      "CLAY": 0.0,
+      "SILT": 0.0,
+      "ORGANIC": 0.0
+    },
+    "WATER_FAST": {
+      "SAND": 0.0,
+      "CLAY": 0.0,
+      "SILT": 0.0,
+      "ORGANIC": 0.0
+    },
+    "WATER_SLOW": {
+      "SAND": 0.0,
+      "CLAY": 0.0,
+      "SILT": 0.0,
+      "ORGANIC": 0.0
+    }
+  },
+  
+  "soil_profiles": {
+    "LOAM": {
+      "layers": [
+        {"soil_class": "LOAM_TOP", "thickness": 0.076},
+        {"soil_class": "LOAM_FAST", "thickness": 0.109}, 
+        {"soil_class": "LOAM_SLOW", "thickness": 5.0}
+      ],
+      "parameters": {
+        "POROSITY": 0.45,
+        "FIELD_CAPACITY": 0.22,
+        "SAT_WILT": 0.08,
+        "HBV_BETA": 1.2,
+        "MAX_CAP_RISE_RATE": 2.5,
+        "MAX_PERC_RATE": 15.0,
+        "BASEFLOW_COEFF": 0.02,
+        "BASEFLOW_N": 1.0
+      }
+    },
+    "CLAY": {
+      "layers": [
+        {"soil_class": "LOAM_TOP", "thickness": 0.076},
+        {"soil_class": "LOAM_FAST", "thickness": 0.109}, 
+        {"soil_class": "LOAM_SLOW", "thickness": 5.0}
+      ],
+      "parameters": {
+        "POROSITY": 0.38,
+        "FIELD_CAPACITY": 0.35,
+        "SAT_WILT": 0.18,
+        "HBV_BETA": 2.5,
+        "MAX_CAP_RISE_RATE": 1.0,
+        "MAX_PERC_RATE": 5.0,
+        "BASEFLOW_COEFF": 0.005,
+        "BASEFLOW_N": 0.8
+      }
+    },
+    "SILTY_CLAY": {
+      "layers": [
+        {"soil_class": "LOAM_TOP", "thickness": 0.076},
+        {"soil_class": "LOAM_FAST", "thickness": 0.109}, 
+        {"soil_class": "LOAM_SLOW", "thickness": 5.0}
+      ],
+      "parameters": {
+        "POROSITY": 0.36,
+        "FIELD_CAPACITY": 0.32,
+        "SAT_WILT": 0.16,
+        "HBV_BETA": 2.2,
+        "MAX_CAP_RISE_RATE": 1.2,
+        "MAX_PERC_RATE": 6.0,
+        "BASEFLOW_COEFF": 0.008,
+        "BASEFLOW_N": 0.8
+      }
+    },
+    "SANDY_CLAY": {
+      "layers": [
+        {"soil_class": "LOAM_TOP", "thickness": 0.076},
+        {"soil_class": "LOAM_FAST", "thickness": 0.109}, 
+        {"soil_class": "LOAM_SLOW", "thickness": 5.0}
+      ],
+      "parameters": {
+        "POROSITY": 0.42,
+        "FIELD_CAPACITY": 0.28,
+        "SAT_WILT": 0.14,
+        "HBV_BETA": 1.8,
+        "MAX_CAP_RISE_RATE": 1.5,
+        "MAX_PERC_RATE": 10.0,
+        "BASEFLOW_COEFF": 0.015,
+        "BASEFLOW_N": 0.9
+      }
+    },
+    "CLAY_LOAM": {
+      "layers": [
+        {"soil_class": "LOAM_TOP", "thickness": 0.076},
+        {"soil_class": "LOAM_FAST", "thickness": 0.109}, 
+        {"soil_class": "LOAM_SLOW", "thickness": 5.0}
+      ],
+      "parameters": {
+        "POROSITY": 0.41,
+        "FIELD_CAPACITY": 0.28,
+        "SAT_WILT": 0.12,
+        "HBV_BETA": 1.6,
+        "MAX_CAP_RISE_RATE": 2.0,
+        "MAX_PERC_RATE": 12.0,
+        "BASEFLOW_COEFF": 0.018,
+        "BASEFLOW_N": 1.0
+      }
+    },
+    "SANDY_LOAM": {
+      "layers": [
+        {"soil_class": "SANDY_LOAM_TOP", "thickness": 0.076},
+        {"soil_class": "SANDY_LOAM_FAST", "thickness": 0.109},
+        {"soil_class": "SANDY_LOAM_SLOW", "thickness": 5.0}
+      ],
+      "parameters": {
+        "POROSITY": 0.52,
+        "FIELD_CAPACITY": 0.15,
+        "SAT_WILT": 0.05,
+        "HBV_BETA": 0.8,
+        "MAX_CAP_RISE_RATE": 3.5,
+        "MAX_PERC_RATE": 25.0,
+        "BASEFLOW_COEFF": 0.05,
+        "BASEFLOW_N": 1.2
+      }
+    },
+    "SILTY_CLAY_LOAM": {
+      "layers": [
+        {"soil_class": "SILTY_CLAY_LOAM_TOP", "thickness": 0.076},
+        {"soil_class": "SILTY_CLAY_LOAM_FAST", "thickness": 0.109},
+        {"soil_class": "SILTY_CLAY_LOAM_SLOW", "thickness": 5.0}
+      ],
+      "parameters": {
+        "POROSITY": 0.38,
+        "FIELD_CAPACITY": 0.32,
+        "SAT_WILT": 0.15,
+        "HBV_BETA": 2.0,
+        "MAX_CAP_RISE_RATE": 1.8,
+        "MAX_PERC_RATE": 8.0,
+        "BASEFLOW_COEFF": 0.01,
+        "BASEFLOW_N": 0.8
+      }
+    },
+    "SANDY_CLAY_LOAM": {
+      "layers": [
+        {"soil_class": "LOAM_TOP", "thickness": 0.076},
+        {"soil_class": "LOAM_FAST", "thickness": 0.109}, 
+        {"soil_class": "LOAM_SLOW", "thickness": 5.0}
+      ],
+      "parameters": {
+        "POROSITY": 0.48,
+        "FIELD_CAPACITY": 0.22,
+        "SAT_WILT": 0.10,
+        "HBV_BETA": 1.4,
+        "MAX_CAP_RISE_RATE": 2.8,
+        "MAX_PERC_RATE": 18.0,
+        "BASEFLOW_COEFF": 0.025,
+        "BASEFLOW_N": 1.1
+      }
+    },
+    "SILT_LOAM": {
+      "layers": [
+        {"soil_class": "LOAM_TOP", "thickness": 0.076},
+        {"soil_class": "LOAM_FAST", "thickness": 0.109}, 
+        {"soil_class": "LOAM_SLOW", "thickness": 5.0}
+      ],
+      "parameters": {
+        "POROSITY": 0.50,
+        "FIELD_CAPACITY": 0.30,
+        "SAT_WILT": 0.10,
+        "HBV_BETA": 1.5,
+        "MAX_CAP_RISE_RATE": 2.2,
+        "MAX_PERC_RATE": 16.0,
+        "BASEFLOW_COEFF": 0.02,
+        "BASEFLOW_N": 1.0
+      }
+    },
+    "SILT": {
+      "layers": [
+        {"soil_class": "LOAM_TOP", "thickness": 0.076},
+        {"soil_class": "LOAM_FAST", "thickness": 0.109}, 
+        {"soil_class": "LOAM_SLOW", "thickness": 5.0}
+      ],
+      "parameters": {
+        "POROSITY": 0.52,
+        "FIELD_CAPACITY": 0.28,
+        "SAT_WILT": 0.08,
+        "HBV_BETA": 1.3,
+        "MAX_CAP_RISE_RATE": 2.5,
+        "MAX_PERC_RATE": 20.0,
+        "BASEFLOW_COEFF": 0.03,
+        "BASEFLOW_N": 1.1
+      }
+    },
+    "LOAMY_SAND": {
+      "layers": [
+        {"soil_class": "SANDY_LOAM_TOP", "thickness": 0.076},
+        {"soil_class": "SANDY_LOAM_FAST", "thickness": 0.109},
+        {"soil_class": "SANDY_LOAM_SLOW", "thickness": 5.0}
+      ],
+      "parameters": {
+        "POROSITY": 0.58,
+        "FIELD_CAPACITY": 0.12,
+        "SAT_WILT": 0.03,
+        "HBV_BETA": 0.6,
+        "MAX_CAP_RISE_RATE": 4.0,
+        "MAX_PERC_RATE": 35.0,
+        "BASEFLOW_COEFF": 0.08,
+        "BASEFLOW_N": 1.4
+      }
+    },
+    "SAND": {
+      "layers": [
+        {"soil_class": "SANDY_LOAM_TOP", "thickness": 0.076},
+        {"soil_class": "SANDY_LOAM_FAST", "thickness": 0.109},
+        {"soil_class": "SANDY_LOAM_SLOW", "thickness": 5.0}
+      ],
+      "parameters": {
+        "POROSITY": 0.60,
+        "FIELD_CAPACITY": 0.08,
+        "SAT_WILT": 0.02,
+        "HBV_BETA": 0.4,
+        "MAX_CAP_RISE_RATE": 5.0,
+        "MAX_PERC_RATE": 50.0,
+        "BASEFLOW_COEFF": 0.12,
+        "BASEFLOW_N": 1.5
+      }
+    },
+    "LAKE_SOIL": {
+      "layers": [
+        {"soil_class": "WATER_TOP", "thickness": 0.076},
+        {"soil_class": "WATER_FAST", "thickness": 0.109},
+        {"soil_class": "WATER_SLOW", "thickness": 5.0}
+      ],
+      "parameters": {
+        "POROSITY": 1.0,
+        "FIELD_CAPACITY": 1.0,
+        "SAT_WILT": 0.0,
+        "HBV_BETA": 0.0,
+        "MAX_CAP_RISE_RATE": 0.0,
+        "MAX_PERC_RATE": 1000.0,
+        "BASEFLOW_COEFF": 1.0,
+        "BASEFLOW_N": 1.0
+      }
+    },
+    "WATER": {
+      "layers": [
+        {"soil_class": "WATER_TOP", "thickness": 0.076},
+        {"soil_class": "WATER_FAST", "thickness": 0.109},
+        {"soil_class": "WATER_SLOW", "thickness": 5.0}
+      ],
+      "parameters": {
+        "POROSITY": 1.0,
+        "FIELD_CAPACITY": 1.0,
+        "SAT_WILT": 0.0,
+        "HBV_BETA": 0.0,
+        "MAX_CAP_RISE_RATE": 0.0,
+        "MAX_PERC_RATE": 1000.0,
+        "BASEFLOW_COEFF": 1.0,
+        "BASEFLOW_N": 1.0
+      }
+    }
+  },
+  
+  "default_soil_parameters": {
+    "POROSITY": 0.497,
+    "FIELD_CAPACITY": 0.118,
+    "SAT_WILT": 0.0,
+    "HBV_BETA": 0.576,
+    "MAX_CAP_RISE_RATE": 1.122,
+    "MAX_PERC_RATE": 0.0,
+    "BASEFLOW_COEFF": 0.0,
+    "BASEFLOW_N": 0.0
+  },
+  
+  "default_snow_parameters": {
+    "MELT_FACTOR": 3.13,
+    "MIN_MELT_FACTOR": 1.30,
+    "HBV_MELT_FOR_CORR": 1.0,
+    "REFREEZE_FACTOR": 1.0,
+    "HBV_MELT_ASP_CORR": 0.658
+  },
+  
+  "global_parameters": {
+    "RAINSNOW_TEMP": 0.15,
+    "RAINSNOW_DELTA": 1.16,
+    "TOC_MULTIPLIER": 1.0,
+    "AIRSNOW_COEFF": 0.05
+  },
+  
+  "output_options": {
+    "write_forcing_functions": true,
+    "evaluation_metrics": ["NASH_SUTCLIFFE"]
+  }
+}

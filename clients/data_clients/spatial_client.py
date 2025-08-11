@@ -301,11 +301,29 @@ class SpatialLayersClient:
                 'HEIGHT': str(target_height)
             }
             
-            return download_with_progress(
+            # Download the raster
+            success = download_with_progress(
                 self.endpoints['nrcan_legacy_landcover'], 
                 output_path, 
                 params=params
             )
+            
+            # Fix CRS if download was successful
+            if success and output_path.exists():
+                try:
+                    import rasterio
+                    from rasterio.crs import CRS
+                    
+                    # Read the raster and fix the CRS
+                    with rasterio.open(output_path, 'r+') as src:
+                        if src.crs is None or 'LOCAL_CS' in str(src.crs):
+                            # Assign EPSG:3979 CRS since that's what we requested
+                            src.crs = CRS.from_epsg(3979)
+                            print(f"Fixed CRS: Assigned EPSG:3979 to {output_path.name}")
+                except Exception as crs_error:
+                    print(f"Warning: Could not fix CRS: {crs_error}")
+            
+            return success
             
         except ImportError:
             print("WARNING: pyproj not available, falling back to WGS84 coordinates")
@@ -433,7 +451,7 @@ class SpatialLayersClient:
                 if 'features' in watershed_data and watershed_data['features']:
                     from shapely.geometry import shape
                     watershed_geom = shape(watershed_data['features'][0]['geometry'])
-                    area_km2 = watershed_geom.area / 1e6  # Convert m² to km²
+                    area_km2 = watershed_geom.area / 1e6  # Convert m2 to km2
                 
                 return {
                     'success': True,

@@ -21,6 +21,11 @@ try:
 except ImportError:
     WhiteboxWatershedClient = None
 
+try:
+    from processors.manning_calculator import ManningCalculator
+except ImportError:
+    ManningCalculator = None
+
 
 class BasicAttributesCalculator:
     """
@@ -42,9 +47,19 @@ class BasicAttributesCalculator:
         except ImportError:
             self.has_whitebox = False
             print("WARNING: WhiteboxTools not available for advanced calculations")
+        
+        # Initialize ManningCalculator for HYDROLOGICALLY CORRECT Manning's n calculation
+        if ManningCalculator:
+            self.manning_calculator = ManningCalculator(self.workspace_dir)
+            self.has_manning_calculator = True
+        else:
+            self.has_manning_calculator = False
+            print("WARNING: ManningCalculator not available - will use BasinMaker defaults")
     
     def calculate_basic_attributes_from_watershed_results(self, watershed_results: Dict, 
-                                                        dem_path: Path) -> pd.DataFrame:
+                                                        dem_path: Path,
+                                                        landuse_raster_path: Path = None,
+                                                        landuse_manning_table: Path = None) -> pd.DataFrame:
         """
         Calculate basic attributes using real BasinMaker logic adapted to your infrastructure
         EXTRACTED FROM: calculate_basic_attributes() in BasinMaker addattributes/calculatebasicattributesqgis.py
@@ -61,6 +76,10 @@ class BasicAttributesCalculator:
             Results from your ProfessionalWatershedAnalyzer.analyze_watershed_complete()
         dem_path : Path
             Path to DEM raster file
+        landuse_raster_path : Path, optional
+            Path to landuse raster for HYDROLOGICALLY CORRECT Manning's n calculation
+        landuse_manning_table : Path, optional
+            Path to landuse-to-Manning's n lookup table
             
         Returns:
         --------
@@ -93,7 +112,16 @@ class BasicAttributesCalculator:
             area_stats, river_stats, routing_info
         )
         
-        print(f"   Calculated attributes for {len(catinfo)} catchments")
+        # Step 5: Calculate HYDROLOGICALLY CORRECT Manning's n coefficients using BasinMaker logic
+        print("   Calculating Manning's n coefficients...")
+        catinfo = self.calculate_manning_coefficients(
+            basic_attributes=catinfo,
+            watershed_results=watershed_results,
+            landuse_raster_path=landuse_raster_path,
+            landuse_manning_table=landuse_manning_table
+        )
+        
+        print(f"   Calculated complete attributes for {len(catinfo)} catchments")
         return catinfo
     
     def _load_watershed_data(self, watershed_results: Dict) -> Tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:
@@ -165,16 +193,11 @@ class BasicAttributesCalculator:
                             'a_average': aspect_average
                         })
                     
-            except Exception as e:
-                print(f"Warning: Could not process catchment {catchment_id}: {e}")
-                # Add default values
-                area_stats.append({
-                    'Gridcode': catchment_id,
-                    'Area_m': float(catchment.geometry.area),
-                    'd_average': 500.0,  # Default elevation
-                    's_average': 5.0,    # Default slope in degrees
-                    'a_average': 180.0   # Default aspect
-                })
+            except (ValueError, KeyError, AttributeError, rasterio.errors.RasterioIOError) as e:
+                error_msg = f"FAILED to process catchment {catchment_id}: {e}"
+                print(f"ERROR: {error_msg}")
+                # Re-raise the error instead of masking it with defaults
+                raise RuntimeError(f"Catchment processing failed for ID {catchment_id}: {str(e)}") from e
         
         return pd.DataFrame(area_stats)
     
@@ -211,7 +234,9 @@ class BasicAttributesCalculator:
                                 elev = src.read(1, window=((row, row+1), (col, col+1)))[0, 0]
                                 if elev != src.nodata:
                                     elevations.append(elev)
-                        except:
+                        except (ValueError, IndexError, rasterio.errors.RasterioIOError) as e:
+                            # Log specific coordinate that failed for debugging
+                            print(f"Warning: Failed to extract elevation at coordinate {coord}: {e}")
                             continue
                     
                     # Calculate min/max elevation (like BasinMaker v.rast.stats minimum/maximum)
@@ -219,8 +244,7 @@ class BasicAttributesCalculator:
                         d_minimum = float(min(elevations))
                         d_maximum = float(max(elevations))
                     else:
-                        d_minimum = 500.0  # Default
-                        d_maximum = 510.0
+                        raise RuntimeError(f"No valid elevation data found for river {river_id}")
                     
                     river_stats.append({
                         'Gridcode': river_id,
@@ -229,14 +253,11 @@ class BasicAttributesCalculator:
                         'd_maximum': d_maximum
                     })
                     
-            except Exception as e:
-                print(f"Warning: Could not process river {river_id}: {e}")
-                river_stats.append({
-                    'Gridcode': river_id,
-                    'Length_m': 1000.0,  # Default 1km
-                    'd_minimum': 500.0,
-                    'd_maximum': 510.0
-                })
+            except (ValueError, KeyError, AttributeError, rasterio.errors.RasterioIOError) as e:
+                error_msg = f"FAILED to process river {river_id}: {e}"
+                print(f"ERROR: {error_msg}")
+                # Re-raise the error instead of masking it with defaults
+                raise RuntimeError(f"River processing failed for ID {river_id}: {str(e)}") from e
         
         return pd.DataFrame(river_stats)
     
@@ -244,7 +265,7 @@ class BasicAttributesCalculator:
         """Calculate average slope using WhiteboxTools like BasinMaker r.slope.aspect"""
         
         if not self.has_whitebox:
-            return 5.0  # Default slope in degrees
+            raise RuntimeError("WhiteboxTools required for slope calculation but not available")
         
         try:
             # Create temporary files
@@ -275,15 +296,14 @@ class BasicAttributesCalculator:
                     temp_file.unlink()
             
         except Exception as e:
-            print(f"Warning: Slope calculation failed: {e}")
-        
-        return 5.0  # Default slope
+            print(f"ERROR: Slope calculation failed: {e}")
+            raise RuntimeError(f"Slope calculation failed: {str(e)}") from e
     
     def _calculate_aspect_statistics(self, catchment, dem_path: Path) -> float:
         """Calculate average aspect using WhiteboxTools like BasinMaker r.slope.aspect"""
         
         if not self.has_whitebox:
-            return 180.0  # Default aspect (south-facing)
+            raise RuntimeError("WhiteboxTools required for aspect calculation but not available")
         
         try:
             # Create temporary files
@@ -308,9 +328,8 @@ class BasicAttributesCalculator:
                 temp_aspect.unlink()
                 
         except Exception as e:
-            print(f"Warning: Aspect calculation failed: {e}")
-        
-        return 180.0  # Default aspect
+            print(f"ERROR: Aspect calculation failed: {e}")
+            raise RuntimeError(f"Aspect calculation failed: {str(e)}") from e
     
     def _generate_routing_topology(self, catchments_gdf: gpd.GeoDataFrame, 
                                  watershed_results: Dict) -> pd.DataFrame:
@@ -608,9 +627,10 @@ class BasicAttributesCalculator:
         gdf['BkfWidth'] = np.maximum(3.0, (gdf.get('Area_km2', 1.0) ** 0.3) * 2)
         gdf['BkfDepth'] = gdf['BkfWidth'] * 0.1
         
-        # Manning's coefficients (defaults)
-        gdf['Ch_n'] = 0.030      # Channel Manning's n
-        gdf['FloodP_n'] = 0.035  # Floodplain Manning's n
+        # Manning's coefficients - HYDROLOGICALLY CORRECT approach using BasinMaker logic
+        # Initialize with BasinMaker defaults, will be properly calculated if landcover data available
+        gdf['Ch_n'] = 0.030      # Channel Manning's n (BasinMaker default, will be calculated from landcover if available)
+        gdf['FloodP_n'] = 0.035  # Floodplain Manning's n (BasinMaker DEFALUT_FLOOD_N, will be calculated from landcover if available)
         
         # Lake flags
         gdf['IsLake'] = 0  # Default: not a lake subbasin
@@ -622,6 +642,49 @@ class BasicAttributesCalculator:
         gdf['Has_POI'] = 0
         
         return gdf
+    
+    def calculate_manning_coefficients(self, basic_attributes: pd.DataFrame,
+                                     watershed_results: Dict,
+                                     landuse_raster_path: Path = None,
+                                     landuse_manning_table: Path = None) -> pd.DataFrame:
+        """
+        Calculate HYDROLOGICALLY CORRECT Manning's n coefficients using BasinMaker logic
+        This replaces the fixed values (0.030, 0.035) with proper landcover-based calculation
+        """
+        
+        print("Calculating Manning's n coefficients using BasinMaker logic...")
+        
+        # If no landuse data provided or ManningCalculator not available, keep defaults
+        if not self.has_manning_calculator or not landuse_raster_path or not landuse_raster_path.exists():
+            print("   Using BasinMaker default Manning's n values (no landuse data available)")
+            return basic_attributes
+        
+        try:
+            # Use ManningCalculator to get proper landcover-based Manning's n
+            enhanced_attributes = self.manning_calculator.calculate_from_watershed_results(
+                watershed_results=watershed_results,
+                basic_attributes=basic_attributes,
+                landuse_raster_path=landuse_raster_path,
+                landuse_manning_table=pd.read_csv(landuse_manning_table) if landuse_manning_table else None
+            )
+            
+            # Update channel Manning's n based on floodplain Manning's n (hydrological practice)
+            if 'FloodP_n' in enhanced_attributes.columns:
+                # Channel typically 10-20% lower than floodplain (BasinMaker approach)
+                enhanced_attributes['Ch_n'] = enhanced_attributes['FloodP_n'] * 0.85
+                # Ensure reasonable channel Manning's n bounds
+                enhanced_attributes['Ch_n'] = np.clip(enhanced_attributes['Ch_n'], 0.025, 0.1)
+                
+                print(f"   Updated Manning's n for {len(enhanced_attributes)} catchments from landcover")
+                print(f"   FloodP_n range: {enhanced_attributes['FloodP_n'].min():.3f} - {enhanced_attributes['FloodP_n'].max():.3f}")
+                print(f"   Ch_n range: {enhanced_attributes['Ch_n'].min():.3f} - {enhanced_attributes['Ch_n'].max():.3f}")
+            
+            return enhanced_attributes
+            
+        except Exception as e:
+            print(f"   WARNING: Manning's n calculation failed: {e}")
+            print("   Using BasinMaker default values")
+            return basic_attributes
     
     def validate_attributes(self, gdf: gpd.GeoDataFrame) -> Dict:
         """Validate calculated attributes and provide summary"""

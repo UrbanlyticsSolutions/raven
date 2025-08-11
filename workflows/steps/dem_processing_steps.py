@@ -88,8 +88,10 @@ class DownloadAndPrepareDEM(WorkflowStep):
             
             spatial_client = SpatialLayersClient()
             
-            # Download DEM
-            dem_file = workspace / f"dem_{resolution}.tif"
+            # Download DEM - ULTRA-SIMPLE: Save to data/ folder with simple name
+            data_dir = workspace / "data"
+            data_dir.mkdir(exist_ok=True)
+            dem_file = data_dir / "dem.tif"
             
             self.logger.info("Attempting USGS 3DEP download...")
             

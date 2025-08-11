@@ -57,7 +57,7 @@ class SoilDataClient:
             results[prop] = raster_path
             
             if raster_path:
-                print(f"✅ {prop.capitalize()} raster saved: {raster_path}")
+                print(f"SUCCESS: {prop.capitalize()} raster saved: {raster_path}")
                 
                 # Quick stats
                 try:
@@ -71,7 +71,7 @@ class SoilDataClient:
                 except Exception as e:
                     print(f"   Could not read raster stats: {e}")
             else:
-                print(f"❌ Failed to download {prop} raster")
+                print(f"ERROR: Failed to download {prop} raster")
         
         return results
 
@@ -172,7 +172,7 @@ class SoilDataClient:
                             percent = (downloaded / total_size) * 100
                             print(f"\rProgress: {percent:.1f}% ({downloaded:,}/{total_size:,} bytes)", end='')
             
-            print(f"\n✅ SLC v3.2 dataset downloaded: {output_path}")
+            print(f"\nSUCCESS: SLC v3.2 dataset downloaded: {output_path}")
             print(f"   File size: {os.path.getsize(output_path):,} bytes")
             print(f"   Extract this ZIP file to access soil polygon shapefiles")
             
@@ -295,10 +295,10 @@ class SoilDataClient:
             results['files']['property_summary'] = summary_file
             
             results['success'] = True
-            print(f"✅ Comprehensive soil dataset created successfully")
+            print(f"SUCCESS: Comprehensive soil dataset created successfully")
             
         else:
-            print("❌ Failed to download soil polygon data")
+            print("ERROR: Failed to download soil polygon data")
         
         return results
 

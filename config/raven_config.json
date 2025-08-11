@@ -1,0 +1,210 @@
+{
+  "metadata": {
+    "version": "3.0",
+    "description": "Unified RAVEN Hydrological Workflow Configuration",
+    "created": "2025-08-11",
+    "author": "Centralized Config Management System",
+    "config_type": "unified_workflow"
+  },
+  
+  "global_parameters": {
+    "coordinate_system": {
+      "input_crs": "EPSG:4326",
+      "processing_crs": "EPSG:3005",
+      "output_crs": "EPSG:4326",
+      "description": "BC Albers (3005) for processing, WGS84 for I/O"
+    },
+    "spatial_resolution": {
+      "dem_resolution_m": 30,
+      "landcover_resolution_m": 30,
+      "soil_resolution_m": 250,
+      "output_resolution_m": 30
+    },
+    "temporal_settings": {
+      "default_time_step": "daily",
+      "simulation_start": "2010-01-01",
+      "simulation_end": "2015-12-31",
+      "spinup_years": 2,
+      "warmup_period_days": 365
+    },
+    "quality_control": {
+      "validate_geometries": true,
+      "check_topology": true,
+      "enforce_connectivity": true,
+      "minimum_area_threshold_km2": 0.1,
+      "maximum_area_threshold_km2": 50000.0
+    }
+  },
+  
+  "data_sources": {
+    "dem": {
+      "primary_source": "USGS",
+      "fallback_sources": ["SRTM_30m", "ASTER_GDEM"],
+      "preprocessing": {
+        "fill_depressions": true,
+        "breach_depressions": true,
+        "smooth_artifacts": false
+      }
+    },
+    "landcover": {
+      "source": "ESA_WorldCover",
+      "year": 2020,
+      "classification_system": "WorldCover_v100",
+      "reclassification_rules": {
+        "10": "FOREST",
+        "20": "AGRICULTURE", 
+        "30": "AGRICULTURE",
+        "40": "AGRICULTURE",
+        "50": "URBAN",
+        "60": "SPARSE_VEGETATION",
+        "70": "SNOW_ICE",
+        "80": "WATER",
+        "90": "HERBACEOUS_WETLAND",
+        "95": "MANGROVE"
+      }
+    },
+    "soil": {
+      "source": "SoilGrids250m",
+      "properties": ["clay", "sand", "silt", "organic_carbon", "bulk_density"],
+      "depth_layers": ["0-5cm", "5-15cm", "15-30cm"],
+      "aggregation_method": "weighted_average"
+    },
+    "climate": {
+      "precipitation_source": "ECCC_GRIDDED",
+      "temperature_source": "ECCC_GRIDDED", 
+      "pet_method": "PRIESTLEY_TAYLOR",
+      "snow_data_required": true
+    }
+  },
+  
+  "watershed_delineation": {
+    "flow_algorithm": "d8",
+    "stream_threshold": 5000,
+    "snap_distance_m": 1000,
+    "min_watershed_area_km2": 1.0,
+    "depression_filling": true,
+    "depression_breaching": true,
+    "buffer_km": 10
+  },
+  
+  "lake_processing": {
+    "enabled": true,
+    "min_lake_area_m2": 50000,
+    "buffer_distance_m": 100,
+    "use_satellite_detection": true,
+    "subbasin_merging": {
+      "enabled": true,
+      "min_subbasin_area_km2": 5.0,
+      "merge_small_subbasins": true,
+      "fix_duplicate_creation": true
+    }
+  },
+  
+  "hru_generation": {
+    "method": "dominant_landcover_soil",
+    "min_hru_area_km2": 1.0,
+    "max_hrus_per_subbasin": 10,
+    "landcover_classes": ["FOREST", "AGRICULTURE", "URBAN", "WATER", "WETLAND"],
+    "soil_texture_classes": ["CLAY", "LOAM", "SAND", "CLAY_LOAM", "SANDY_LOAM"],
+    "elevation_bands": [0, 500, 1000, 1500, 2000],
+    "aspect_classes": 4,
+    "merge_small_hrus": true
+  },
+  
+  "routing_configuration": {
+    "routing_method": "ROUTE_DIFFUSIVE_WAVE",
+    "catchment_route": "TRIANGULATED_IRREGULAR_NETWORK",
+    "channel_routing": true,
+    "reservoir_routing": false,
+    "connectivity_validation": true
+  },
+  
+  "hydrological_processes": [
+    "PRECIPITATION",
+    "CANOPY_EVAP", 
+    "INFILTRATION",
+    "EVAPORATION",
+    "TRANSPIRATION",
+    "SNOWFALL",
+    "SNOWMELT",
+    "PERCOLATION",
+    "BASEFLOW",
+    "SURFACE_RUNOFF"
+  ],
+  
+  "model_structure": {
+    "soil_layers": ["PONDED_WATER", "CANOPY", "SNOW", "SURFACE", "SOIL_0", "SOIL_1", "GROUNDWATER"],
+    "evaporation_method": "PET_PRIESTLEY_TAYLOR",
+    "snow_model": "SNOBAL_SIMPLE",
+    "infiltration_model": "GREEN_AMPT",
+    "baseflow_model": "LINEAR_ANALYTIC"
+  },
+  
+  "hydraulic_parameters": {
+    "manning_roughness": {
+      "channel_default": 0.035,
+      "overland_forest": 0.15,
+      "overland_agriculture": 0.05,
+      "overland_urban": 0.025
+    },
+    "channel_geometry": {
+      "width_calculation": "andreadis_relationship",
+      "depth_calculation": "hydraulic_geometry", 
+      "slope_calculation": "dem_derived"
+    }
+  },
+  
+  "model_outputs": {
+    "basin_outputs": ["RAINFALL", "SNOWFALL", "TEMP_AVE", "PET", "RUNOFF", "DISCHARGE"],
+    "hydrograph_output": true,
+    "water_balance_output": true,
+    "subbasin_output": true
+  },
+  
+  "file_paths": {
+    "output_base": "projects",
+    "temp_directory": "temp",
+    "models_directory": "models"
+  },
+  
+  "output_settings": {
+    "save_intermediate_files": true,
+    "generate_plots": true,
+    "create_summary_reports": true,
+    "export_formats": ["geojson", "shapefile", "gpkg"],
+    "compression": true,
+    "metadata_tracking": true
+  },
+  
+  "validation": {
+    "check_file_existence": true,
+    "validate_geometries": true,
+    "check_connectivity": true,
+    "minimum_area_threshold_km2": 0.1
+  },
+  
+  "debugging": {
+    "save_intermediate_files": true,
+    "generate_plots": true,
+    "verbose_logging": true,
+    "preserve_temp_files": false
+  },
+  
+  "calibration_parameters": {
+    "calibration_period": {
+      "start_date": "2010-01-01",
+      "end_date": "2012-12-31"
+    },
+    "validation_period": {
+      "start_date": "2013-01-01", 
+      "end_date": "2015-12-31"
+    },
+    "objective_functions": ["NSE", "RMSE", "PBIAS"],
+    "calibration_variables": [
+      "FOREST_COVERAGE",
+      "IMPERVIOUS_FRAC",
+      "SOIL_POROSITY",
+      "BASEFLOW_COEFF"
+    ]
+  }
+}

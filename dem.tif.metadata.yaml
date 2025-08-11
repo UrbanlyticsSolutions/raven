@@ -1,0 +1,27 @@
+checksum: e85d01ee51928e9b629eabdd8ea3eb130eb3431629b55d58416a5bc2d3e7911e
+coordinate_system: EPSG:4326
+creation_date: '2025-08-11T01:01:59.289073'
+file_path: E:\python\Raven\dem.tif
+file_size_bytes: 2472636
+processing_steps:
+- input_files: []
+  output_files:
+  - E:\python\Raven\dem.tif
+  parameters:
+    bounds: !!python/tuple
+    - -119.07653551318683
+    - 49.54739198198198
+    - -118.86596448681317
+    - 49.765098018018016
+    resolution: 30
+    source: SRTM
+  processing_time_seconds: 0.0
+  software_version: DEMClippingStep
+  step_name: dem_download
+  timestamp: '2025-08-11T01:01:59.288420'
+source: Digital Elevation Model from SRTM
+spatial_extent:
+  max_x: -118.86596448681317
+  max_y: 49.765098018018016
+  min_x: -119.07653551318683
+  min_y: 49.54739198198198

@@ -51,6 +51,120 @@ class ImprovedOutletSnapper:
             
         return logger
     
+    def snap_outlet_nearest_point(self, outlet_coords: Tuple[float, float], 
+                                 streams_file: str, max_search_distance: float = None) -> Dict[str, Any]:
+        """
+        Snap outlet to nearest point on stream network (not downstream)
+        
+        Parameters:
+        -----------
+        outlet_coords : tuple
+            Original outlet coordinates (longitude, latitude)
+        streams_file : str
+            Path to streams shapefile/geojson
+        max_search_distance : float, optional
+            Maximum search distance in meters
+            
+        Returns:
+        --------
+        Dict with snapping results including nearest point on stream
+        """
+        
+        self.logger.info(f"Starting nearest point snapping for ({outlet_coords[0]:.6f}, {outlet_coords[1]:.6f})")
+        
+        max_distance = max_search_distance or self.default_snap_distance_m
+        original_point = Point(outlet_coords)
+        
+        try:
+            # Load streams
+            streams_gdf = gpd.read_file(streams_file)
+            self.logger.info(f"Loaded {len(streams_gdf)} stream segments")
+            
+            # Find the nearest point on any stream
+            min_distance = float('inf')
+            nearest_point = None
+            stream_id = None
+            
+            for idx, stream in streams_gdf.iterrows():
+                stream_line = stream.geometry
+                if stream_line.is_empty or not stream_line.is_valid:
+                    continue
+                    
+                # Find the closest point on this stream
+                distance = stream_line.distance(original_point)
+                if distance < min_distance:
+                    min_distance = distance
+                    nearest_point = stream_line.interpolate(stream_line.project(original_point))
+                    stream_id = idx
+            
+            if nearest_point is None:
+                return {
+                    'success': False,
+                    'error': 'No valid stream segments found',
+                    'original_coords': outlet_coords,
+                    'method': 'nearest_point_snapping'
+                }
+            
+            # Convert to geographic coordinates
+            snapped_coords = (nearest_point.x, nearest_point.y)
+            
+            # Calculate snap distance
+            snap_distance_deg = original_point.distance(nearest_point)
+            snap_distance_m = snap_distance_deg * 111000  # Approximate conversion
+            
+            if snap_distance_m > max_distance:
+                return {
+                    'success': False,
+                    'error': f'Nearest point is {snap_distance_m:.1f}m away (> {max_distance}m limit)',
+                    'original_coords': outlet_coords,
+                    'method': 'nearest_point_snapping'
+                }
+            
+            self.logger.info(f"Nearest point found: ({snapped_coords[0]:.6f}, {snapped_coords[1]:.6f})")
+            self.logger.info(f"Snap distance: {snap_distance_m:.1f}m")
+            
+            # Create output shapefiles
+            original_gdf = gpd.GeoDataFrame(
+                [{'id': 1, 'type': 'original'}],
+                geometry=[original_point],
+                crs='EPSG:4326'
+            )
+            
+            snapped_gdf = gpd.GeoDataFrame(
+                [{'id': 1, 'type': 'snapped_nearest'}],
+                geometry=[nearest_point],
+                crs='EPSG:4326'
+            )
+            
+            # Save outlets
+            original_outlet_file = self.workspace_dir / "original_outlet.shp"
+            snapped_outlet_file = self.workspace_dir / "snapped_outlet_nearest.shp"
+            
+            original_gdf.to_file(original_outlet_file)
+            snapped_gdf.to_file(snapped_outlet_file)
+            
+            return {
+                'success': True,
+                'method': 'nearest_point_snapping',
+                'original_coords': outlet_coords,
+                'snapped_coords': snapped_coords,
+                'snap_distance_m': snap_distance_m,
+                'stream_id': stream_id,
+                'original_outlet_file': str(original_outlet_file),
+                'snapped_outlet_file': str(snapped_outlet_file),
+                'files_created': [str(original_outlet_file), str(snapped_outlet_file)]
+            }
+            
+        except Exception as e:
+            error_msg = f"Nearest point snapping failed: {str(e)}"
+            self.logger.error(error_msg)
+            return {
+                'success': False,
+                'error': error_msg,
+                'original_coords': outlet_coords,
+                'method': 'nearest_point_snapping'
+            }
+    
     def snap_outlet_downstream(self, outlet_coords: Tuple[float, float], 
                               streams_file: str, flow_accum_file: str,
                               max_search_distance: float = None) -> Dict[str, Any]:

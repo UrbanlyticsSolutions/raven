@@ -278,7 +278,8 @@ def test_rvp_generator():
     print("✓ RVP Generator is ready for integration with your existing workflows")
     print("\nUsage example:")
     print("  from processors.rvp_generator import RVPGenerator")
-cator.generate_complete_rvp(watershed_results, 'test_model')")
+    print("  generator = RVPGenerator(output_dir=Path('outputs'))")
+    print("  rvp_file = generator.generate_complete_rvp(watershed_results, 'test_model')")
     
 
 if __name__ == "__main__":

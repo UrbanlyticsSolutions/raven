@@ -33,7 +33,7 @@ class SoilExtractionStep:
         workspace_dir : Path, optional
             Working directory for processing
         """
-        self.workspace_dir = workspace_dir or Path.cwd() / "soil_extraction"
+        self.workspace_dir = Path(workspace_dir) if workspace_dir else Path.cwd() / "soil_extraction"
         self.workspace_dir.mkdir(exist_ok=True, parents=True)
         
         # Initialize client
@@ -129,8 +129,10 @@ class SoilExtractionStep:
         self.logger.info(f"Starting SoilGrids soil extraction for bounds: {bounds}")
         
         try:
-            # Prepare output path
-            soil_file = self.workspace_dir / output_filename
+            # ULTRA-SIMPLE: Save to data/ folder with simple name
+            data_dir = self.workspace_dir / "data"
+            data_dir.mkdir(exist_ok=True)
+            soil_file = data_dir / "soil.tif"
             
             # Get real soil data from SoilGrids API
             self.logger.info("Getting soil data from SoilGrids API")
@@ -180,15 +182,17 @@ class SoilExtractionStep:
             successful_downloads = [path for path in raster_results.values() if path is not None]
             
             if successful_downloads:
-                # Use the clay raster as the primary output file (rename if needed)
+                # Keep all soil texture files separate, create a simple soil.tif copy from clay
                 if raster_results.get('clay'):
                     primary_file = Path(raster_results['clay'])
-                    if primary_file != output_file:
-                        primary_file.rename(output_file)
+                    # Copy clay file to soil.tif instead of renaming
+                    import shutil
+                    shutil.copy2(primary_file, output_file)
                 else:
-                    # Use the first available raster
+                    # Copy the first available raster to soil.tif
                     primary_file = Path(successful_downloads[0])
-                    primary_file.rename(output_file)
+                    import shutil
+                    shutil.copy2(primary_file, output_file)
                 
                 return {
                     'success': True,

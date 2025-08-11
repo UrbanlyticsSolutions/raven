@@ -33,7 +33,7 @@ class LandcoverExtractionStep:
         workspace_dir : Path, optional
             Working directory for processing
         """
-        self.workspace_dir = workspace_dir or Path.cwd() / "landcover_extraction"
+        self.workspace_dir = Path(workspace_dir) if workspace_dir else Path.cwd() / "landcover_extraction"
         self.workspace_dir.mkdir(exist_ok=True, parents=True)
         
         # Initialize client
@@ -88,8 +88,10 @@ class LandcoverExtractionStep:
         self.logger.info(f"Starting landcover extraction for bounds: {bounds}")
         
         try:
-            # Prepare output path
-            landcover_file = self.workspace_dir / output_filename
+            # ULTRA-SIMPLE: Save to data/ folder with simple name
+            data_dir = self.workspace_dir / "data"
+            data_dir.mkdir(exist_ok=True)
+            landcover_file = data_dir / "landcover.tif"
             
             # Try to get real landcover data first
             self.logger.info("Attempting to get real landcover data")

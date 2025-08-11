@@ -322,6 +322,88 @@ class RVTGenerator:
         # This should match the structure returned by your ClimateDataClient
         
         return lines
+    
+    def generate_rvt_from_csv(self, csv_file_path: Path, outlet_name: str, 
+                             latitude: float = 49.5738, longitude: float = -119.0368) -> Path:
+        """
+        Generate RVT file directly from climate CSV file (Magpie format)
+        
+        Parameters:
+        -----------
+        csv_file_path : Path
+            Path to climate CSV file with TEMP_MAX, TEMP_MIN, PRECIP columns
+        outlet_name : str
+            Name for the outlet/model
+        latitude : float
+            Outlet latitude 
+        longitude : float
+            Outlet longitude
+            
+        Returns:
+        --------
+        Path to generated RVT file
+        """
+        
+        rvt_file = self.output_dir / f"{outlet_name}.rvt"
+        
+        if not csv_file_path.exists():
+            raise FileNotFoundError(f"Climate data not found: {csv_file_path}")
+        
+        # Read climate data
+        df = pd.read_csv(csv_file_path, index_col=0, parse_dates=True)
+        df.index = pd.to_datetime(df.index)
+        
+        # Calculate monthly averages for gauge definition
+        df['Month'] = df.index.month
+        monthly_temp_avg = df.groupby('Month')[['TEMP_MIN', 'TEMP_MAX']].mean()
+        monthly_avg_temps = ((monthly_temp_avg['TEMP_MIN'] + monthly_temp_avg['TEMP_MAX']) / 2).values
+        monthly_temps_str = ' '.join([f"{temp:.1f}" for temp in monthly_avg_temps])
+        
+        # Get start date and record count
+        start_date = df.index[0]
+        num_records = len(df)
+        
+        print(f"Generating RVT with {num_records} records from {start_date}")
+        
+        with open(rvt_file, 'w') as f:
+            f.write("#########################################################################\n")
+            f.write(f"# Climate Data for {outlet_name}\n")
+            f.write(f"# Generated from: {csv_file_path.name}\n")
+            f.write(f"# Generated on: {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write("#########################################################################\n\n")
+            
+            # Add gauge definition (required before MultiData)
+            f.write(":Gauge \t\t\t\t\t\tGauge_1\n")
+            f.write(f"\t:Latitude \t\t\t{latitude}\n")
+            f.write(f"\t:Longitude \t\t\t{longitude}\n")
+            f.write("\t:Elevation \t\t\t1800\n")
+            f.write(f"\t:MonthlyAveTemperature {monthly_temps_str}\n")
+            f.write("\t:MonthlyAveEvaporation 30.0 30.0 30.0 30.0 30.0 30.0 30.0 30.0 30.0 30.0 30.0 30.0\n\n")
+            
+            # MultiData section
+            f.write(":MultiData\n")
+            f.write(f"{start_date.strftime('%Y-%m-%d')} 00:00:00 1.0 {num_records}\n")
+            f.write(":Parameters,TEMP_MAX,TEMP_MIN,PRECIP\n")
+            f.write(":Units,C,C,mm/d\n")
+            
+            # Write all data values (fix negative zero issue)
+            for _, row in df.iterrows():
+                temp_max = row.get('TEMP_MAX', 0.0)
+                temp_min = row.get('TEMP_MIN', 0.0)
+                precip = row.get('PRECIP', 0.0)
+                
+                # Fix negative zero values that RAVEN considers non-numeric
+                temp_max = 0.0 if temp_max == -0.0 else temp_max
+                temp_min = 0.0 if temp_min == -0.0 else temp_min
+                precip = 0.0 if precip == -0.0 else precip
+                
+                f.write(f"{temp_max:.2f},{temp_min:.2f},{precip:.2f}\n")
+            
+            f.write(":EndMultiData\n")
+            f.write(":EndGauge\n")
+        
+        print(f"Generated RVT file: {rvt_file}")
+        return rvt_file
 
 
 def test_rvt_generator():

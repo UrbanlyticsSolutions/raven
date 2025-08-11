@@ -111,7 +111,9 @@ class RavenExecutor:
     def _find_raven_executable(self) -> str:
         """Find RAVEN executable in common locations."""
         possible_paths = [
-            # Current workspace
+            # Absolute path to built executable
+            r"E:\python\Raven\RavenHydroFramework\build\Release\Raven.exe",
+            # Current workspace (fallback)
             r"E:\python\Raven\exe\Raven.exe",
             "exe/Raven.exe",
             "Raven.exe",

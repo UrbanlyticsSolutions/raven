@@ -2,14 +2,30 @@
 Base class for all workflow steps
 
 This module defines the common interface and functionality that all workflow steps
-must implement. It provides logging, error handling, and context management.
+must implement. It provides logging, error handling, and context management with
+enhanced path validation and file operations.
 """
 
 from abc import ABC, abstractmethod
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional, Union
 from pathlib import Path
 import logging
+import sys
 from datetime import datetime
+
+# Add parent directory to path for infrastructure imports
+sys.path.append(str(Path(__file__).parent.parent.parent))
+
+try:
+    from infrastructure.path_manager import AbsolutePathManager, PathResolutionError, FileAccessError
+    from infrastructure.file_operations import SecureFileOperations, FileValidationError
+    from infrastructure.workspace_validator import WorkspaceValidator, WorkspaceValidationError
+except ImportError as e:
+    # Fallback if infrastructure not available
+    logging.warning(f"Enhanced path management not available: {e}")
+    AbsolutePathManager = None
+    SecureFileOperations = None
+    WorkspaceValidator = None
 
 class WorkflowStep(ABC):
     """
@@ -19,9 +35,9 @@ class WorkflowStep(ABC):
     This ensures consistent interface and behavior across all steps.
     """
     
-    def __init__(self, step_name: str, step_category: str, description: str = ""):
+    def __init__(self, step_name: str, step_category: str, description: str = "", workspace_dir: Optional[Union[str, Path]] = None):
         """
-        Initialize workflow step
+        Initialize workflow step with enhanced path management
         
         Parameters:
         -----------
@@ -31,6 +47,8 @@ class WorkflowStep(ABC):
             Category this step belongs to (e.g., 'validation', 'processing')
         description : str, optional
             Human-readable description of what this step does
+        workspace_dir : str or Path, optional
+            Workspace directory for this step
         """
         self.step_name = step_name
         self.step_category = step_category
@@ -42,6 +60,23 @@ class WorkflowStep(ABC):
         self.start_time = None
         self.end_time = None
         self.execution_time_seconds = None
+        
+        # Enhanced path management (optional, falls back gracefully)
+        self.path_manager = None
+        self.file_ops = None
+        self.workspace_validator = None
+        
+        if workspace_dir and AbsolutePathManager:
+            try:
+                self.path_manager = AbsolutePathManager(workspace_dir)
+                self.file_ops = SecureFileOperations(self.path_manager)
+                self.workspace_validator = WorkspaceValidator(self.path_manager)
+                self.logger.info(f"Enhanced path management enabled for workspace: {self.path_manager.workspace_root}")
+            except Exception as e:
+                self.logger.warning(f"Could not initialize enhanced path management: {e}")
+                self.path_manager = None
+                self.file_ops = None
+                self.workspace_validator = None
         
     def set_context_manager(self, context_manager):
         """
@@ -96,14 +131,16 @@ class WorkflowStep(ABC):
         if missing_keys:
             raise ValueError(f"Missing required inputs: {missing_keys}")
     
-    def validate_file_exists(self, file_path: str) -> Path:
+    def validate_file_exists(self, file_path: Union[str, Path], validate_integrity: bool = True) -> Path:
         """
-        Validate that a file exists and return Path object
+        Validate that a file exists and return validated Path object
         
         Parameters:
         -----------
-        file_path : str
+        file_path : str or Path
             Path to file to validate
+        validate_integrity : bool, optional
+            Whether to perform file integrity validation
             
         Returns:
         --------
@@ -114,31 +151,141 @@ class WorkflowStep(ABC):
         -------
         FileNotFoundError
             If file does not exist
+        PathResolutionError
+            If path cannot be resolved (when enhanced path management available)
+        FileAccessError
+            If file cannot be accessed or is corrupted (when enhanced path management available)
         """
-        path = Path(file_path)
-        if not path.exists():
-            raise FileNotFoundError(f"Required file not found: {file_path}")
-        return path
+        if self.path_manager and self.file_ops:
+            # Use enhanced path management
+            try:
+                abs_path = self.path_manager.resolve_path(file_path)
+                self.path_manager.validate_path(abs_path, must_exist=True, must_be_file=True)
+                
+                if validate_integrity:
+                    self.path_manager.validate_file_integrity(abs_path, min_size=1)
+                
+                return abs_path
+            except (PathResolutionError, FileAccessError) as e:
+                self.logger.error(f"File validation failed for {file_path}: {e}")
+                raise
+        else:
+            # Fallback to basic validation
+            path = Path(file_path)
+            if not path.exists():
+                raise FileNotFoundError(f"Required file not found: {file_path}")
+            if not path.is_file():
+                raise ValueError(f"Path is not a file: {file_path}")
+            return path.resolve()
     
-    def create_output_path(self, workspace_dir: str, filename: str) -> Path:
+    def create_output_path(self, workspace_dir: Union[str, Path], filename: str, 
+                          validate_workspace: bool = True) -> Path:
         """
-        Create output file path in workspace directory
+        Create output file path in workspace directory with validation
         
         Parameters:
         -----------
-        workspace_dir : str
+        workspace_dir : str or Path
             Workspace directory path
         filename : str
             Output filename
+        validate_workspace : bool, optional
+            Whether to validate workspace directory
             
         Returns:
         --------
         Path
-            Full path for output file
+            Full path for output file (absolute and validated)
+            
+        Raises:
+        -------
+        PathResolutionError
+            If paths cannot be resolved (when enhanced path management available)
+        FileAccessError
+            If workspace cannot be created or accessed (when enhanced path management available)
         """
-        workspace = Path(workspace_dir)
-        workspace.mkdir(exist_ok=True, parents=True)
-        return workspace / filename
+        if self.path_manager and self.file_ops:
+            # Use enhanced path management
+            try:
+                # Sanitize filename for security
+                safe_filename = self.path_manager.sanitize_filename(filename)
+                if safe_filename != filename:
+                    self.logger.warning(f"Filename sanitized: '{filename}' -> '{safe_filename}'")
+                
+                # Create workspace structure if needed
+                workspace_path = self.path_manager.create_path_structure(workspace_dir, is_file_path=False)
+                
+                # Create and validate output path
+                output_path = workspace_path / safe_filename
+                output_path = self.path_manager.ensure_file_writable(output_path)
+                
+                if validate_workspace and self.workspace_validator:
+                    # Quick workspace validation
+                    try:
+                        self.path_manager.validate_workspace_permissions()
+                    except FileAccessError as e:
+                        self.logger.warning(f"Workspace validation warning: {e}")
+                
+                return output_path
+            except (PathResolutionError, FileAccessError) as e:
+                self.logger.error(f"Output path creation failed for {workspace_dir}/{filename}: {e}")
+                raise
+        else:
+            # Fallback to basic path creation
+            workspace = Path(workspace_dir)
+            workspace.mkdir(exist_ok=True, parents=True)
+            return (workspace / filename).resolve()
+    
+    def validate_workspace_integrity(self, required_files: Optional[List[str]] = None,
+                                   required_dirs: Optional[List[str]] = None,
+                                   min_free_space_gb: float = 1.0) -> Dict[str, Any]:
+        """
+        Validate workspace integrity with comprehensive checks
+        
+        Parameters:
+        -----------
+        required_files : List[str], optional
+            List of required files (relative to workspace)
+        required_dirs : List[str], optional  
+            List of required directories (relative to workspace)
+        min_free_space_gb : float, optional
+            Minimum free disk space required in GB
+            
+        Returns:
+        --------
+        Dict[str, Any]
+            Validation results and metrics
+            
+        Raises:
+        -------
+        WorkspaceValidationError
+            If workspace validation fails
+        RuntimeError
+            If enhanced validation not available but validation requested
+        """
+        if not self.workspace_validator:
+            if required_files or required_dirs:
+                raise RuntimeError(
+                    "Workspace validation requested but enhanced path management not available. "
+                    "Initialize step with workspace_dir parameter."
+                )
+            self.logger.warning("Enhanced workspace validation not available, skipping detailed checks")
+            return {'status': 'skipped', 'reason': 'enhanced_validation_unavailable'}
+        
+        try:
+            validation_results = self.workspace_validator.validate_workspace_complete(
+                required_dirs=required_dirs,
+                required_files=required_files,
+                min_free_space_gb=min_free_space_gb,
+                check_file_integrity=True
+            )
+            
+            self.logger.info(f"Workspace validation passed: {validation_results.get('validation_summary', '')}")
+            return validation_results
+            
+        except WorkspaceValidationError as e:
+            self.logger.error(f"Workspace validation failed: {e}")
+            raise
     
     def _log_step_start(self):
         """Log step start and record start time"""

@@ -30,8 +30,8 @@ class DEMClippingStep:
         workspace_dir : Path, optional
             Working directory for processing
         """
-        self.workspace_dir = workspace_dir or Path.cwd() / "dem_clipping"
-        self.workspace_dir.mkdir(exist_ok=True, parents=True)
+        self.workspace_dir = Path(workspace_dir) if workspace_dir else Path.cwd() / "dem_clipping"
+        Path(self.workspace_dir).mkdir(exist_ok=True, parents=True)
         
         # Initialize client
         self.spatial_client = SpatialLayersClient()

@@ -1,0 +1,441 @@
+{
+  "metadata": {
+    "version": "2.0",
+    "description": "Complete RAVEN Parameter Table with All Methods, Routing, and Processes",
+    "created": "2025-08-10",
+    "purpose": "Centralized lookup for Steps 5-6 parameter extraction and validation"
+  },
+
+  "rvi_parameters": {
+    "temporal_configuration": {
+      ":StartDate": {
+        "format": "YYYY-MM-DD HH:MM:SS",
+        "example": "2002-10-01 00:00:00",
+        "required": true
+      },
+      ":EndDate": {
+        "format": "YYYY-MM-DD HH:MM:SS", 
+        "example": "2004-09-30 00:00:00",
+        "required": true
+      },
+      ":TimeStep": {
+        "units": "days",
+        "default": 1.0,
+        "range": [0.01, 30.0]
+      },
+      ":Method": {
+        "options": ["ORDERED_SERIES", "EULER", "RUNGE_KUTTA"],
+        "default": "ORDERED_SERIES"
+      }
+    },
+
+    "model_configuration": {
+      ":SoilModel": {
+        "options": [
+          "SOIL_TWO_LAYER",
+          "SOIL_MULTILAYER 2",
+          "SOIL_MULTILAYER 3", 
+          "SOIL_MULTILAYER 4",
+          "SOIL_MULTILAYER 5"
+        ],
+        "default": "SOIL_MULTILAYER 3"
+      },
+      ":Routing": {
+        "options": [
+          "ROUTE_NONE",
+          "ROUTE_HYDROLOGIC", 
+          "ROUTE_DIFFUSIVE_WAVE",
+          "ROUTE_KINEMATIC_WAVE",
+          "ROUTE_MUSKINGUM",
+          "ROUTE_MUSKINGUM_CUNGE",
+          "ROUTE_STORAGE_COEFF"
+        ],
+        "default": "ROUTE_HYDROLOGIC"
+      },
+      ":Evaporation": {
+        "options": [
+          "PET_PRIESTLEY_TAYLOR",
+          "PET_PENMAN_MONTEITH",
+          "PET_HARGREAVES_1985",
+          "PET_TURC_1961",
+          "PET_MAKKINK_1957",
+          "PET_HAMON_1963",
+          "PET_THORNTHWAITE",
+          "PET_MONTHLY_FACTOR"
+        ],
+        "default": "PET_HARGREAVES_1985"
+      }
+    },
+
+    "hydrological_processes": {
+      ":Precipitation": {
+        "algorithms": [
+          "PRECIP_RAVEN",
+          "PRECIP_TRIANGULAR",
+          "PRECIP_CONSTANT"
+        ]
+      },
+      ":CanopyEvaporation": {
+        "algorithms": [
+          "CANEVP_RUTTER",
+          "CANEVP_MAXIMUM",
+          "CANEVP_ALL"
+        ]
+      },
+      ":CanopySnowEvap": {
+        "algorithms": [
+          "CANEVP_RUTTER",
+          "CANEVP_MAXIMUM"
+        ]
+      },
+      ":CanopyDrip": {
+        "algorithms": [
+          "CANDRIP_RUTTER",
+          "CANDRIP_SLOWDRAIN"
+        ]
+      },
+      ":Infiltration": {
+        "algorithms": [
+          "INF_GREEN_AMPT",
+          "INF_GA_SIMPLE",
+          "INF_HBV",
+          "INF_VIC",
+          "INF_VIC_ARNO",
+          "INF_RATIONAL",
+          "INF_PHILIP_1957",
+          "INF_HORTON"
+        ]
+      },
+      ":Percolation": {
+        "algorithms": [
+          "PERC_LINEAR",
+          "PERC_POWER_LAW",
+          "PERC_SACRAMENTO",
+          "PERC_HBV",
+          "PERC_VIC",
+          "PERC_CONSTANT"
+        ]
+      },
+      ":Interflow": {
+        "algorithms": [
+          "INTERFLOW_PRMS",
+          "INTERFLOW_UBC"
+        ]
+      },
+      ":Baseflow": {
+        "algorithms": [
+          "BASE_LINEAR",
+          "BASE_POWER_LAW",
+          "BASE_VIC",
+          "BASE_TOPMODEL",
+          "BASE_CONSTANT"
+        ]
+      },
+      ":SoilEvaporation": {
+        "algorithms": [
+          "SOILEVAP_LINEAR",
+          "SOILEVAP_ROOT",
+          "SOILEVAP_TOPMODEL",
+          "SOILEVAP_HBV",
+          "SOILEVAP_VIC",
+          "SOILEVAP_SEQUEN"
+        ]
+      },
+      ":Transpiration": {
+        "algorithms": [
+          "TRANS_LINEAR",
+          "TRANS_ROOT",
+          "TRANS_VIC",
+          "TRANS_HBV"
+        ]
+      },
+      ":CapillaryRise": {
+        "algorithms": [
+          "CRISE_HBV"
+        ]
+      },
+      ":SnowBalance": {
+        "algorithms": [
+          "SNOBAL_SIMPLE_MELT",
+          "SNOBAL_COLD_CONTENT",
+          "SNOBAL_HBV",
+          "SNOBAL_CEMA_NEIGE",
+          "SNOBAL_HMETS",
+          "SNOBAL_UBC",
+          "SNOBAL_CRHM_TI"
+        ]
+      },
+      ":OpenWaterEvaporation": {
+        "algorithms": [
+          "OPEN_WATER_EVAP",
+          "OPEN_WATER_RIPARIAN"
+        ]
+      },
+      ":GlacierMelt": {
+        "algorithms": [
+          "GMELT_HBV",
+          "GMELT_UBC",
+          "GMELT_SIMPLE_MELT"
+        ]
+      }
+    },
+
+    "output_configuration": {
+      ":EvaluationMetrics": {
+        "options": ["NASH_SUTCLIFFE", "RMSE", "ABSERR", "PDIFF", "KLING_GUPTA"]
+      },
+      ":EvaluationPeriod": {
+        "format": "YYYY-MM-DD YYYY-MM-DD"
+      },
+      ":SuppressOutput": {
+        "options": ["true", "false"]
+      },
+      ":WriteForcingFunctions": {
+        "options": ["true", "false"]
+      },
+      ":WriteNetcdfFormat": {
+        "options": ["true", "false"]
+      }
+    }
+  },
+
+  "rvp_parameters": {
+    "soil_classes": {
+      "required_attributes": [
+        "POROSITY", "FIELD_CAPACITY", "WILTING_POINT", "SAT_WILT",
+        "HBV_BETA", "HBV_LP", "SAT_HYDRAULIC_CONDUCTIVITY"
+      ],
+      "optional_attributes": [
+        "AIR_ENTRY_PRESSURE", "BROOKS_COREY_N", "MAX_BASEFLOW_RATE",
+        "BASEFLOW_N", "SCS_CN", "IMPERMEABLE_FRAC", "SOIL_TENSION_STORAGE_COEFF",
+        "MAX_INTERFLOW_RATE"
+      ],
+      "units": {
+        "POROSITY": "none",
+        "FIELD_CAPACITY": "mm",
+        "WILTING_POINT": "mm",
+        "SAT_WILT": "mm",
+        "HBV_BETA": "none",
+        "HBV_LP": "none",
+        "SAT_HYDRAULIC_CONDUCTIVITY": "mm/hr",
+        "AIR_ENTRY_PRESSURE": "mm",
+        "BROOKS_COREY_N": "none",
+        "MAX_BASEFLOW_RATE": "mm/d",
+        "BASEFLOW_N": "none"
+      }
+    },
+
+    "vegetation_classes": {
+      "required_attributes": [
+        "MAX_HEIGHT", "MAX_LAI", "MAX_LEAF_CONDUCTANCE", "ALBEDO"
+      ],
+      "optional_attributes": [
+        "MAX_CANOPY_CAPACITY", "MAX_SNOW_CAPACITY", "TFRAIN", "TFSNOW",
+        "STEMFLOW_FRAC", "RAIN_ICEPT_PCT", "SNOW_ICEPT_PCT", "SAI_HT_RATIO",
+        "TRUNK_FRACTION"
+      ],
+      "units": {
+        "MAX_HEIGHT": "m",
+        "MAX_LAI": "none",
+        "MAX_LEAF_CONDUCTANCE": "mm_per_s",
+        "ALBEDO": "none",
+        "MAX_CANOPY_CAPACITY": "mm",
+        "MAX_SNOW_CAPACITY": "mm",
+        "TFRAIN": "none",
+        "TFSNOW": "none"
+      }
+    },
+
+    "landuse_classes": {
+      "required_attributes": [
+        "IMPERMEABLE_FRAC", "FOREST_COV", "MANNING_N", "INTERCEPTION_CAPACITY"
+      ],
+      "optional_attributes": [
+        "DEPRESSION_STORAGE", "RILL_COVERAGE", "CC_DECAY_COEFF", "SNOW_ROUGH_COEFF",
+        "UBC_ICEPT_FACTOR", "UBC_CF", "REFREEZE_FACTOR", "PET_CORRECTION"
+      ],
+      "units": {
+        "IMPERMEABLE_FRAC": "none",
+        "FOREST_COV": "none", 
+        "MANNING_N": "none",
+        "INTERCEPTION_CAPACITY": "mm",
+        "DEPRESSION_STORAGE": "mm"
+      }
+    },
+
+    "terrain_classes": {
+      "attributes": [
+        "HILLSLOPE_TRAVEL_TIME", "DRAINAGE_DENSITY", "TOPMODEL_LAMBDA",
+        "GAMMA_SHAPE", "GAMMA_SCALE"
+      ],
+      "units": {
+        "HILLSLOPE_TRAVEL_TIME": "d",
+        "DRAINAGE_DENSITY": "1/m",
+        "TOPMODEL_LAMBDA": "m",
+        "GAMMA_SHAPE": "none",
+        "GAMMA_SCALE": "none"
+      }
+    },
+
+    "channel_profile": {
+      "required_sections": [":SurveyPoints", ":RoughnessZones"],
+      "optional_sections": [":StageFlowRating", ":ManningsTable"],
+      "parameters": [
+        "Bedslope", "SurveyPoints", "RoughnessZones", "FloodplainRoughness"
+      ],
+      "default_hydraulic_parameters": {
+        "mean_slope": 0.001,
+        "mean_width": 10.0,
+        "mean_depth": 2.0,
+        "channel_manning_n": 0.035,
+        "side_slope_ratio": 2.0,
+        "flood_plain_width": 4.0,
+        "flood_elevation": 5.0,
+        "channel_elevation": 0.0
+      },
+      "parameter_ranges": {
+        "mean_slope": [0.0001, 0.1],
+        "mean_width": [1.0, 100.0],
+        "mean_depth": [0.1, 10.0],
+        "channel_manning_n": [0.02, 0.15]
+      }
+    },
+
+    "global_parameters": {
+      "climate": {
+        "RAINSNOW_TEMP": {"units": "C", "default": 0.0},
+        "RAINSNOW_DELTA": {"units": "C", "default": 2.0},
+        "TOC_MULTIPLIER": {"units": "none", "default": 1.0},
+        "ADIABATIC_LAPSE": {"units": "C/km", "default": 6.5},
+        "WET_ADIABATIC_LAPSE": {"units": "C/km", "default": 4.9}
+      },
+      "snow": {
+        "SNOW_SWI": {"units": "none", "default": 0.05},
+        "MIN_SNOW_ALBEDO": {"units": "none", "default": 0.5},
+        "MAX_SNOW_ALBEDO": {"units": "none", "default": 0.85},
+        "ALBEDO_DECAY_RATE": {"units": "1/d", "default": 0.1},
+        "MIN_MELT_FACTOR": {"units": "mm/C/d", "default": 2.74},
+        "MAX_MELT_FACTOR": {"units": "mm/C/d", "default": 4.26}
+      },
+      "routing": {
+        "AVG_ANNUAL_RUNOFF": {"units": "mm", "default": 300.0},
+        "CHANNEL_VELOCITY": {"units": "m/s", "default": 0.5},
+        "DIFFUSIVITY": {"units": "m2/s", "default": 1000.0}
+      }
+    }
+  },
+
+  "rvh_parameters": {
+    "hru_definition": {
+      "required_fields": ["ID", "Area", "Elevation", "Latitude", "Longitude"],
+      "optional_fields": ["Slope", "Aspect", "SoilProfile", "LandUse", "Vegetation"],
+      "units": {
+        "Area": "km2",
+        "Elevation": "m",
+        "Latitude": "degrees",
+        "Longitude": "degrees", 
+        "Slope": "degrees",
+        "Aspect": "degrees"
+      }
+    },
+
+    "subbasin_definition": {
+      "required_fields": ["ID", "Name", "Downstream_ID", "Profile"],
+      "optional_fields": ["Gauged", "Area", "ReachLength", "RiverLength"],
+      "units": {
+        "Area": "km2",
+        "ReachLength": "km",
+        "RiverLength": "km"
+      }
+    },
+
+    "reservoir_definition": {
+      "required_fields": ["Name", "SubBasinID", "HRUID", "Type"],
+      "optional_fields": ["WeirCoefficient", "CrestWidth", "MaxDepth", "LakeArea"],
+      "types": ["RESERVOIR_SIMPLE", "RESERVOIR_PRMS", "RESERVOIR_HEC"],
+      "units": {
+        "WeirCoefficient": "none",
+        "CrestWidth": "m",
+        "MaxDepth": "m", 
+        "LakeArea": "km2"
+      }
+    }
+  },
+
+  "rvt_parameters": {
+    "time_series": {
+      ":Data": {
+        "format": "YYYY-MM-DD HH:MM:SS value",
+        "variables": ["PRECIP", "TEMP_AVE", "TEMP_MIN", "TEMP_MAX", "PET", "WIND_VEL", "REL_HUMIDITY"]
+      },
+      ":MultiData": {
+        "format": "YYYY-MM-DD HH:MM:SS val1 val2 val3...",
+        "purpose": "Multiple time series in single block"
+      },
+      ":GaugeDataTable": {
+        "format": "Station_ID Latitude Longitude Elevation",
+        "purpose": "Meteorological station information"
+      }
+    },
+
+    "reservoir_management": {
+      ":ReservoirExtraction": {
+        "parameters": ["MaxStage", "MaxCapacity", "TargetStage"]
+      },
+      ":DemandMultiplier": {
+        "format": "monthly multipliers (12 values)"
+      }
+    }
+  },
+
+  "validation_rules": {
+    "parameter_ranges": {
+      "soil": {
+        "POROSITY": [0.1, 0.8],
+        "FIELD_CAPACITY": [10.0, 800.0],
+        "SAT_HYDRAULIC_CONDUCTIVITY": [0.1, 500.0],
+        "HBV_BETA": [0.5, 6.0],
+        "HBV_LP": [0.1, 1.0]
+      },
+      "vegetation": {
+        "MAX_HEIGHT": [0.1, 50.0],
+        "MAX_LAI": [0.0, 10.0],
+        "ALBEDO": [0.05, 0.95],
+        "MAX_LEAF_CONDUCTANCE": [1.0, 50.0]
+      },
+      "landuse": {
+        "IMPERMEABLE_FRAC": [0.0, 1.0],
+        "FOREST_COV": [0.0, 1.0],
+        "MANNING_N": [0.01, 1.0],
+        "INTERCEPTION_CAPACITY": [0.0, 10.0]
+      }
+    },
+    
+    "consistency_checks": {
+      "field_capacity_wilting_point": "FIELD_CAPACITY >= WILTING_POINT",
+      "porosity_field_capacity": "POROSITY >= FIELD_CAPACITY/1000",
+      "imperviousness_range": "0 <= IMPERMEABLE_FRAC <= 1",
+      "lai_positive": "MAX_LAI >= 0"
+    }
+  },
+
+  "extraction_functions": {
+    "step5_rvi_generation": {
+      "function": "generate_rvi_from_table",
+      "required_sections": ["temporal_configuration", "model_configuration", "hydrological_processes"],
+      "validation": ["check_parameter_ranges", "validate_process_combinations"]
+    },
+    
+    "step5_rvp_generation": {
+      "function": "generate_rvp_from_table", 
+      "required_sections": ["soil_classes", "vegetation_classes", "landuse_classes"],
+      "validation": ["validate_class_parameters", "check_consistency_rules"]
+    },
+
+    "step6_calibration_setup": {
+      "function": "extract_calibration_parameters",
+      "target_parameters": ["HBV_BETA", "HBV_LP", "SAT_HYDRAULIC_CONDUCTIVITY", "MAX_LEAF_CONDUCTANCE"],
+      "bounds": "use validation_rules.parameter_ranges"
+    }
+  }
+}

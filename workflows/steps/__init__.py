@@ -43,6 +43,15 @@ from .soil_extraction_step import (
     SoilExtractionStep
 )
 
+# BasinMaker integration steps
+from .lake_connectivity_step import (
+    LakeConnectivityStep
+)
+
+from .basinmaker_refinement_step import (
+    BasinMakerRefinementStep
+)
+
 from .hru_generation_steps import (
     GenerateHRUsFromRoutingProduct,
     CreateSubBasinsAndHRUs
@@ -78,6 +87,10 @@ STEP_REGISTRY = {
     # Separate data extraction steps (replaces integrate_landcover_soil)
     'extract_landcover': LandcoverExtractionStep,
     'extract_soil': SoilExtractionStep,
+    
+    # BasinMaker integration steps
+    'lake_connectivity': LakeConnectivityStep,
+    'basinmaker_refinement': BasinMakerRefinementStep,
     
     # HRU generation steps
     'generate_hrus_routing': GenerateHRUsFromRoutingProduct,
@@ -183,6 +196,8 @@ __all__ = [
     'UnifiedWatershedDelineation',        # Replaces DelineateWatershedAndStreams + DetectAndClassifyLakes
     'LandcoverExtractionStep',           # Replaces part of LandcoverSoilIntegrator
     'SoilExtractionStep',                # Replaces part of LandcoverSoilIntegrator
+    'LakeConnectivityStep',              # BasinMaker lake connectivity analysis
+    'BasinMakerRefinementStep',          # BasinMaker refinement functions
     'GenerateHRUsFromRoutingProduct',
     'CreateSubBasinsAndHRUs',
     'GenerateRAVENModelFiles',
