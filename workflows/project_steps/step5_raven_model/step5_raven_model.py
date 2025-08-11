@@ -380,8 +380,13 @@ class Step5RAVENModel:
                         channel_profile = "Chn_ZERO_LENGTH"
                     print(f"    Using fallback channel profile for subbasin {sub_id}: {channel_profile}")
                 
-                # Extract GAUGED from subbasin data (not HRU data)
-                if 'GAUGED' in subbasin:
+                # Extract GAUGED from subbasin data - ENSURE OUTLET IS ALWAYS GAUGED
+                downstream_id = int(subbasin.get('DowSubId', 0))
+                
+                if downstream_id == -1:  # This is the outlet subbasin
+                    gauged = 1  # Always gauge the outlet for hydrograph output
+                    print(f"    Outlet subbasin {sub_id}: GAUGED = 1 (forced for discharge output)")
+                elif 'GAUGED' in subbasin:
                     gauged = int(subbasin['GAUGED'])
                 elif 'Has_POI' in subbasin:
                     gauged = 1 if subbasin['Has_POI'] > 0 else 0
@@ -512,9 +517,9 @@ class Step5RAVENModel:
         
         output_lines = []
         
-        # BasinMaker trapezoidal channel geometry constants - ENHANCED FOR MAXIMUM FLOWS
+        # BasinMaker trapezoidal channel geometry constants (ORIGINAL BasinMaker values)
         zch = 2                    # Side slope ratio (2:1 horizontal:vertical)
-        sidwdfp = 64              # INCREASED: 64m floodplain width each side (was 32m) for maximum flow capacity
+        sidwdfp = 4 / 0.25        # Fixed floodplain width = 16m each side (BasinMaker original)
         
         # Calculate trapezoidal geometry
         sidwd = zch * chdep
@@ -526,40 +531,40 @@ class Step5RAVENModel:
             sidwd = 0.5 * 0.5 * chwd
             zch = (chwd - botwd) / 2 / chdep if chdep > 0 else 2
         
-        # Elevation calculations - ENHANCED flood capacity to handle maximum reference flows
-        zfld = 12 + elev          # INCREASED: 12m flood depth (was 8m) for maximum flow capacity
+        # Elevation calculations (BasinMaker original: 4m flood depth)
+        zfld = 4 + elev           # 4m flood depth above bankfull
         zbot = elev - chdep       # Channel bottom elevation
         
-        # BasinMaker 8-point survey pattern
+        # BasinMaker 8-point survey pattern with VARIABLE geometry
         x0 = 0.0                                           # Left floodplain start
-        x1 = sidwdfp                                       # Left floodplain edge (64m)
+        x1 = sidwdfp                                       # Left floodplain edge (16m)
         x2 = sidwdfp + sidwd                              # Left bank top
         x3 = sidwdfp + sidwd + botwd                      # Left bank bottom
-        x4 = sidwdfp + sidwd + botwd                      # Right bank bottom (same as x3)
-        x5 = sidwdfp + sidwd + botwd + botwd              # Right bank top
-        x6 = sidwdfp + sidwd + botwd + botwd + sidwd      # Right floodplain edge
-        x7 = sidwdfp + sidwd + botwd + botwd + sidwd + sidwdfp  # Right floodplain end
+        x4 = x3                                           # Right bank bottom (same as x3)
+        x5 = sidwdfp + sidwd + botwd + sidwd              # Right bank top
+        x6 = sidwdfp + sidwd + botwd + sidwd + sidwd      # Right floodplain edge
+        x7 = sidwdfp + sidwd + botwd + sidwd + sidwd + sidwdfp  # Right floodplain end
         
         # Channel profile header
         output_lines.append(f":ChannelProfile {chname}")
         output_lines.append(f"  :Bedslope {chslope:.6f}")
         output_lines.append("  :SurveyPoints")
-        output_lines.append("    # Channel cross-section with ENHANCED flood capacity (8m depth, 64m total width)")
+        output_lines.append("    # Channel cross-section with BasinMaker 8-point geometry")
         
-        # BasinMaker 8-point survey geometry
-        output_lines.append(f"    {x0:.1f} {zfld:.2f}")    # Left floodplain start
-        output_lines.append(f"    {x1:.1f} {elev:.2f}")    # Left floodplain edge
-        output_lines.append(f"    {x2:.1f} {elev:.2f}")    # Left bank top
-        output_lines.append(f"    {x3:.1f} {zbot:.2f}")    # Left bank bottom
-        output_lines.append(f"    {x4:.1f} {zbot:.2f}")    # Right bank bottom
-        output_lines.append(f"    {x5:.1f} {elev:.2f}")    # Right bank top
-        output_lines.append(f"    {x6:.1f} {elev:.2f}")    # Right floodplain edge
-        output_lines.append(f"    {x7:.1f} {zfld:.2f}")    # Right floodplain end
+        # BasinMaker 8-point survey geometry (VARIABLE based on channel dimensions)
+        output_lines.append(f"    {x0:.1f} {zfld:.1f}")    # Left floodplain start
+        output_lines.append(f"    {x1:.1f} {elev:.1f}")    # Left floodplain edge
+        output_lines.append(f"    {x2:.1f} {elev:.1f}")    # Left bank top
+        output_lines.append(f"    {x3:.1f} {zbot:.1f}")    # Left bank bottom
+        output_lines.append(f"    {x4:.1f} {zbot:.1f}")    # Right bank bottom
+        output_lines.append(f"    {x5:.1f} {elev:.1f}")    # Right bank top
+        output_lines.append(f"    {x6:.1f} {elev:.1f}")    # Right floodplain edge
+        output_lines.append(f"    {x7:.1f} {zfld:.1f}")    # Right floodplain end
         
         output_lines.append("  :EndSurveyPoints")
         output_lines.append("  :RoughnessZones")
         
-        # BasinMaker 3-zone roughness pattern
+        # BasinMaker 3-zone roughness pattern (left floodplain, channel, right floodplain)
         output_lines.append(f"    {x0:.1f} {floodn:.4f}")    # Left floodplain Manning's n
         output_lines.append(f"    {x2:.1f} {channeln:.4f}")  # Channel Manning's n
         output_lines.append(f"    {x6:.1f} {floodn:.4f}")    # Right floodplain Manning's n
@@ -1350,8 +1355,7 @@ class Step5RAVENModel:
             if output_config.get('write_forcing_functions', True):  # Default to True to match benchmark
                 f.write(":WriteForcingFunctions\n")
             
-            # Enable discharge output for hydrograph comparison using CustomOutput
-            f.write(":CustomOutput DAILY AVERAGE SURFACE_WATER BY_SUBBASIN\n")
+            # Discharge output enabled by setting outlet subbasin GAUGED = 1
             
             # Default evaluation metrics to match benchmark
             metrics = output_config.get('evaluation_metrics', ['NASH_SUTCLIFFE', 'RMSE'])
@@ -1657,16 +1661,60 @@ class Step5RAVENModel:
             f.write(f"# Channel Properties file for {outlet_name}\n")
             f.write("# Generated using RAVEN benchmark format\n\n")
             
-            # Use Step 3 channel profiles if available, with enhanced flood capacity
+            # Use Step 3 channel profiles if available, regenerate with proper BasinMaker geometry
             if step3_channel_profiles:
                 print(f"[STEP3 INTEGRATION] Using {len(step3_channel_profiles)} channel profiles from Step 3")
-                print(f"[ENHANCED] Applying enhanced flood capacity to existing channel profiles")
+                print(f"[BASINMAKER] Regenerating with proper BasinMaker 8-point geometry")
                 
-                # Apply enhanced flood capacity to existing profiles
+                # Parse existing profiles and regenerate with proper BasinMaker method
                 for profile in step3_channel_profiles:
-                    enhanced_profile = self._enhance_channel_profile_capacity(profile)
-                    f.write(enhanced_profile + "\n\n")
-                print(f"[STEP3 INTEGRATION] Successfully integrated all Step 3 channel profiles with enhanced flood capacity")
+                    lines = profile.strip().split('\n')
+                    channel_name = None
+                    bedslope = 0.001
+                    
+                    # Extract channel name and bedslope from existing profile
+                    for line in lines:
+                        if ':ChannelProfile' in line:
+                            channel_name = line.split()[1]
+                        elif ':Bedslope' in line:
+                            bedslope = float(line.split()[1])
+                    
+                    if channel_name:
+                        # Use default BasinMaker parameters for regeneration
+                        # Extract SubId from channel name (e.g., "CHANNEL_6" -> 6)
+                        try:
+                            subid = int(channel_name.split('_')[1])
+                            # Find corresponding subbasin data
+                            subbasin_row = subbasin_gdf[subbasin_gdf['SubId'] == subid]
+                            if not subbasin_row.empty:
+                                subbasin = subbasin_row.iloc[0]
+                                width = float(subbasin.get('BkfWidth', 2.0))
+                                depth = float(subbasin.get('BkfDepth', 0.5))
+                                elevation = float(subbasin.get('MeanElev', 1000.0))
+                                flood_n = 0.15  # Default floodplain Manning's n
+                                channel_n = 0.06  # Default channel Manning's n
+                            else:
+                                # Use defaults if no subbasin data
+                                width = 2.0
+                                depth = 0.5
+                                elevation = 1000.0
+                                flood_n = 0.15
+                                channel_n = 0.06
+                        except (IndexError, ValueError):
+                            # Use defaults for parsing errors
+                            width = 2.0
+                            depth = 0.5
+                            elevation = 1000.0
+                            flood_n = 0.15
+                            channel_n = 0.06
+                        
+                        # Generate proper BasinMaker profile
+                        basinmaker_profile = self._generate_basinmaker_channel_profile(
+                            channel_name, width, depth, bedslope, elevation, flood_n, channel_n
+                        )
+                        f.write('\n'.join(basinmaker_profile) + "\n\n")
+                
+                print(f"[BASINMAKER] Successfully regenerated all profiles with proper BasinMaker geometry")
             else:
                 # Fallback: Generate channel profiles directly from subbasin hydraulic data
                 print(f"[BASINMAKER FALLBACK] Generating channel profiles directly from subbasin hydraulic data")
@@ -2261,12 +2309,12 @@ class Step5RAVENModel:
             sim_df = pd.read_csv(hydrograph_file)
             print(f"  Loaded simulated data: {len(sim_df)} records")
             
-            # Parse RAVEN hydrograph format - find discharge columns
-            discharge_cols = [col for col in sim_df.columns if 'sub' in col.lower() and ('flow' in col.lower() or '[m3/s]' in col)]
+            # Parse RAVEN hydrograph format - find discharge columns (gauge_XX [m3/s] format)
+            discharge_cols = [col for col in sim_df.columns if 'gauge' in col.lower() and '[m3/s]' in col and 'observed' not in col.lower() and 'inflow' not in col.lower()]
             
             if not discharge_cols:
                 # Try alternative column patterns
-                discharge_cols = [col for col in sim_df.columns if any(x in col for x in ['discharge', 'flow', 'm3/s', 'cms'])]
+                discharge_cols = [col for col in sim_df.columns if any(x in col for x in ['discharge', 'flow', 'm3/s', 'cms']) and 'observed' not in col.lower()]
             
             if not discharge_cols:
                 print(f"  Warning: No discharge columns found in hydrograph file")
@@ -2291,8 +2339,15 @@ class Step5RAVENModel:
                         obs_df = pd.read_csv(obs_file)
                         obs_df['Date'] = pd.to_datetime(obs_df['Date'])
                         print(f"  Loaded observed data: {len(obs_df)} records")
+                        
+                        # Check what discharge column is available in observed data
+                        obs_discharge_cols = [col for col in obs_df.columns if any(x in col.lower() for x in ['discharge', 'flow', 'cms', 'm3/s'])]
+                        if obs_discharge_cols:
+                            print(f"  Found observed discharge column: {obs_discharge_cols[0]}")
+                        
                     except Exception as e:
                         print(f"  Warning: Could not load observed data: {e}")
+                        obs_df = None
                 
                 # Create comparison plot
                 plot_file = self._create_hydrograph_comparison_plot(
@@ -2359,34 +2414,54 @@ class Step5RAVENModel:
                     linewidth=1, label='Simulated')
             
             if obs_df is not None:
-                # Match time period
-                obs_period = obs_df[
-                    (obs_df['Date'] >= sim_df['datetime'].min()) & 
-                    (obs_df['Date'] <= sim_df['datetime'].max())
-                ]
-                if len(obs_period) > 0 and 'discharge_cms' in obs_period.columns:
-                    ax1.plot(obs_period['Date'], obs_period['discharge_cms'], 'r-', 
-                            alpha=0.7, linewidth=1, label='Observed')
+                # Find the discharge column in observed data
+                obs_discharge_cols = [col for col in obs_df.columns if any(x in col.lower() for x in ['discharge', 'flow', 'cms', 'm3/s'])]
+                if obs_discharge_cols:
+                    obs_discharge_col = obs_discharge_cols[0]
+                    
+                    # Match time period
+                    obs_period = obs_df[
+                        (obs_df['Date'] >= sim_df['datetime'].min()) & 
+                        (obs_df['Date'] <= sim_df['datetime'].max())
+                    ]
+                    if len(obs_period) > 0:
+                        ax1.plot(obs_period['Date'], obs_period[obs_discharge_col], 'r-', 
+                                alpha=0.7, linewidth=1, label='Observed')
             
             ax1.set_ylabel('Discharge (m³/s)')
             ax1.set_title(f'Streamflow Hydrograph Comparison - {outlet_name} (1991-2020)')
             ax1.legend()
             ax1.grid(True, alpha=0.3)
             
-            # Zoomed plot (recent 2 years)
-            recent_period = sim_df[sim_df['datetime'] >= sim_df['datetime'].max() - pd.DateOffset(years=2)]
-            ax2.plot(recent_period['datetime'], recent_period[outlet_col], 'b-', 
-                    alpha=0.8, linewidth=1.5, label='Simulated')
+            # Zoomed plot (one sample year for daily detail)
+            sample_year = 2010  # Pick a year in the middle of the simulation
+            sample_start = pd.to_datetime(f'{sample_year}-01-01')
+            sample_end = pd.to_datetime(f'{sample_year}-12-31')
             
-            if obs_df is not None and len(obs_period) > 0:
-                obs_recent = obs_period[obs_period['Date'] >= obs_period['Date'].max() - pd.DateOffset(years=2)]
-                if len(obs_recent) > 0:
-                    ax2.plot(obs_recent['Date'], obs_recent['discharge_cms'], 'r-', 
-                            alpha=0.8, linewidth=1.5, label='Observed')
+            recent_period = sim_df[
+                (sim_df['datetime'] >= sample_start) & 
+                (sim_df['datetime'] <= sample_end)
+            ]
+            
+            ax2.plot(recent_period['datetime'], recent_period[outlet_col], 'b-', 
+                    alpha=0.8, linewidth=1.2, label='Simulated')
+            
+            if obs_df is not None:
+                # Find the discharge column in observed data
+                obs_discharge_cols = [col for col in obs_df.columns if any(x in col.lower() for x in ['discharge', 'flow', 'cms', 'm3/s'])]
+                if obs_discharge_cols:
+                    obs_discharge_col = obs_discharge_cols[0]
+                    obs_recent = obs_df[
+                        (obs_df['Date'] >= sample_start) & 
+                        (obs_df['Date'] <= sample_end)
+                    ]
+                    if len(obs_recent) > 0:
+                        ax2.plot(obs_recent['Date'], obs_recent[obs_discharge_col], 'r-', 
+                                alpha=0.8, linewidth=1.2, label='Observed')
             
             ax2.set_xlabel('Date')
             ax2.set_ylabel('Discharge (m³/s)')
-            ax2.set_title('Recent Period Detail (Last 2 Years)')
+            ax2.set_title(f'Daily Hydrograph Detail ({sample_year})')
             ax2.legend()
             ax2.grid(True, alpha=0.3)
             
@@ -2420,9 +2495,13 @@ class Step5RAVENModel:
             sim_annual = sim_df.groupby('year')[outlet_col].agg(['mean', 'max', 'min']).reset_index()
             
             obs_annual = None
-            if obs_df is not None and 'discharge_cms' in obs_df.columns:
-                obs_df['year'] = obs_df['Date'].dt.year
-                obs_annual = obs_df.groupby('year')['discharge_cms'].agg(['mean', 'max', 'min']).reset_index()
+            if obs_df is not None:
+                # Find the discharge column in observed data
+                obs_discharge_cols = [col for col in obs_df.columns if any(x in col.lower() for x in ['discharge', 'flow', 'cms', 'm3/s'])]
+                if obs_discharge_cols:
+                    obs_discharge_col = obs_discharge_cols[0]
+                    obs_df['year'] = obs_df['Date'].dt.year
+                    obs_annual = obs_df.groupby('year')[obs_discharge_col].agg(['mean', 'max', 'min']).reset_index()
             
             fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))
             
