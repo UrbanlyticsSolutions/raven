@@ -1702,7 +1702,7 @@ class Step6ValidateRunModel:
         return calibration_result
     
     def _run_ostrich_calibration(self, model_dir: Path, model_name: str, step5_data: Dict[str, Any], station_id: str = None) -> Dict[str, Any]:
-        """Run calibration using OSTRICH optimization with multi-objective support"""
+        """Run calibration using OSTRICH optimization with soil and land use parameters"""
         print(f"    OSTRICH executable: {self.ostrich_exe}")
         
         calibration_result = {
@@ -1716,24 +1716,31 @@ class Step6ValidateRunModel:
         }
         
         try:
-            # Prepare observed streamflow data for calibration
-            obs_data_prepared = self._prepare_observed_data_for_ostrich(model_dir, step5_data, station_id)
+            # Setup calibration directory with actual observation data
+            calibration_dir = model_dir / "calibration"
+            calibration_dir.mkdir(exist_ok=True)
+            
+            # Copy model files to calibration directory
+            self._setup_calibration_files(model_dir, calibration_dir, model_name)
+            
+            # Use actual observation data from hydrometric directory
+            obs_data_prepared = self._prepare_actual_observed_data(calibration_dir, model_dir.parent, station_id)
             if not obs_data_prepared['success']:
                 calibration_result['error'] = f"Failed to prepare observed data: {obs_data_prepared['error']}"
                 return calibration_result
             
-            # Create OSTRICH configuration file with multi-objective setup
-            ostrich_config_path = model_dir / "ostrich.txt"
-            config_created = self._create_advanced_ostrich_config(
-                ostrich_config_path, model_dir, model_name, step5_data, obs_data_prepared
+            # Create OSTRICH configuration with soil and land use parameters
+            ostrich_config_path = calibration_dir / "OstIn.txt"
+            config_created = self._create_soil_landuse_ostrich_config(
+                ostrich_config_path, calibration_dir, model_name, obs_data_prepared
             )
             
             if not config_created['success']:
                 calibration_result['error'] = f"Failed to create OSTRICH config: {config_created['error']}"
                 return calibration_result
             
-            # Create template files for parameter substitution
-            template_created = self._create_ostrich_templates(model_dir, model_name, step5_data)
+            # Create template files for parameter substitution  
+            template_created = self._create_soil_landuse_templates(calibration_dir, model_name)
             if not template_created['success']:
                 calibration_result['error'] = f"Failed to create templates: {template_created['error']}"
                 return calibration_result
@@ -1744,19 +1751,22 @@ class Step6ValidateRunModel:
                 calibration_result['error'] = f"Failed to create objective function: {objective_script_created['error']}"
                 return calibration_result
             
-            # Run OSTRICH
-            cmd = [str(self.ostrich_exe)]
+            # Create objective function calculation script
+            obj_script = self._create_nash_sutcliffe_objective(calibration_dir, obs_data_prepared)
             
-            print(f"    Running OSTRICH multi-objective optimization...")
-            print(f"    Objectives: Volume Balance + Low Flow Performance + Mean Flow + Peak Timing")
+            # Run OSTRICH from calibration directory
+            cmd = ['ostrich']  # Try system ostrich first
+            
+            print(f"    Running OSTRICH soil/land use parameter calibration...")
+            print(f"    Parameters: Snow/melt (5), Soil (5), Land use (4) = 14 total")
             self.logger.info(f"Running OSTRICH command: {' '.join(cmd)}")
             
             process = subprocess.run(
                 cmd,
-                cwd=model_dir,
+                cwd=calibration_dir,
                 capture_output=True,
                 text=True,
-                timeout=3600  # 60 minute timeout for calibration
+                timeout=1800  # 30 minute timeout for calibration
             )
             
             calibration_result['stdout'] = process.stdout
@@ -1913,6 +1923,70 @@ class Step6ValidateRunModel:
         
         return calibration_result
     
+    def _setup_calibration_files(self, source_dir: Path, calibration_dir: Path, model_name: str):
+        """Copy and setup model files for calibration"""
+        # Copy all necessary files to calibration directory
+        files_to_copy = [
+            f"{model_name}.rvi", f"{model_name}.rvp", f"{model_name}.rvh", 
+            f"{model_name}.rvt", f"{model_name}.rvc", "climate_forcing_data.rvt",
+            "channel_properties.rvp", "Lakes.rvh"
+        ]
+        
+        for filename in files_to_copy:
+            src_file = source_dir / filename
+            if src_file.exists():
+                shutil.copy2(src_file, calibration_dir / filename)
+        
+        # Create obs directory
+        obs_dir = calibration_dir / "obs"
+        obs_dir.mkdir(exist_ok=True)
+        
+        # Create output directory
+        output_dir = calibration_dir / "output"
+        output_dir.mkdir(exist_ok=True)
+    
+    def _prepare_actual_observed_data(self, calibration_dir: Path, watershed_dir: Path, station_id: str = None) -> Dict[str, Any]:
+        """Prepare actual observed data from hydrometric directory"""
+        result = {'success': False, 'station_id': None, 'obs_file': None, 'error': None}
+        
+        try:
+            # Look for observed streamflow data in hydrometric directory
+            hydrometric_dir = watershed_dir / "hydrometric"
+            obs_file = hydrometric_dir / "observed_streamflow.csv"
+            
+            if not obs_file.exists():
+                result['error'] = f"Observed streamflow file not found: {obs_file}"
+                return result
+            
+            # Read observed data
+            df = pd.read_csv(obs_file)
+            print(f"    Found observed data with {len(df)} records")
+            
+            # Convert to RAVEN format and save to calibration obs directory
+            obs_raven_file = calibration_dir / "obs" / "observed_streamflow.rvt"
+            self._convert_to_raven_obs_format(df, obs_raven_file, station_id)
+            
+            result['success'] = True
+            result['station_id'] = station_id or 'gauge_39'
+            result['obs_file'] = str(obs_raven_file)
+            return result
+            
+        except Exception as e:
+            result['error'] = f"Failed to prepare observed data: {str(e)}"
+            return result
+    
+    def _convert_to_raven_obs_format(self, df: pd.DataFrame, output_file: Path, station_id: str = None):
+        """Convert CSV observed data to RAVEN .rvt format"""
+        station_id = station_id or 'gauge_39'
+        
+        with open(output_file, 'w') as f:
+            f.write(f":ObservationData\tHYDROGRAPH\t{station_id}\tm3/s\n")
+            f.write(f" {df.iloc[0]['Date']}  0:00:00   1  {len(df)}\n")
+            
+            for _, row in df.iterrows():
+                discharge = row.get('Discharge_m3s', row.get('discharge', 0.0))
+                f.write(f"{discharge:.3f} \n")
+
     def _prepare_observed_data_for_ostrich(self, model_dir: Path, step5_data: Dict[str, Any], station_id: str = None) -> Dict[str, Any]:
         """Prepare observed streamflow data for OSTRICH calibration"""
         preparation_result = {
@@ -2036,6 +2110,140 @@ class Step6ValidateRunModel:
         
         return annual_peaks
     
+    def _create_soil_landuse_ostrich_config(self, config_path: Path, calibration_dir: Path, model_name: str, obs_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Create OSTRICH configuration focused on soil and land use parameters"""
+        result = {'success': False, 'error': None}
+        
+        try:
+            station_id = obs_data.get('station_id', 'gauge_39')
+            
+            with open(config_path, 'w') as f:
+                f.write("ProgramType DDS\n")
+                f.write("ObjectiveFunction GCOP\n")
+                f.write("ModelExecutable cmd.exe /C raven_run.bat\n")
+                f.write("PreserveBestModel\n")
+                f.write("PreserveModelOutput\n")
+                f.write("ObjFuncSeparator ;\n\n")
+                
+                f.write("BeginExtraDirs\nEndExtraDirs\n\n")
+                
+                f.write("BeginFilePairs\n")
+                f.write(f"{model_name}_template.rvp ; {model_name}.rvp\n")
+                f.write("EndFilePairs\n\n")
+                
+                f.write("# Parameter definitions - soil, land use, and snow/melt parameters\n")
+                f.write("BeginParams\n")
+                f.write("# Parameter_name     Init_value  Lower_bound  Upper_bound  Transformation\n")
+                f.write("# Snow/melt parameters\n")
+                f.write("par_rainsnow_temp        0.0        -2.0         3.0        none\n")
+                f.write("par_adiabatic_lapse      6.5         4.0        10.0        none\n")
+                f.write("par_precip_lapse         0.0         0.0         8.0        none\n")
+                f.write("par_snow_swi             0.05       0.01         0.2        none\n")
+                f.write("par_airsnow_coeff        0.05       0.01         0.2        none\n")
+                f.write("# Soil parameters (based on physical soil properties)\n")
+                f.write("par_porosity             0.45        0.30         0.60        none\n")
+                f.write("par_field_capacity       0.22        0.15         0.35        none\n")
+                f.write("par_wilting_point        0.08        0.04         0.15        none\n")
+                f.write("par_hbv_beta             1.2         0.5          4.0        none\n")
+                f.write("par_baseflow_coeff       0.05        0.001        0.5        none\n")
+                f.write("# Land use parameters (melt factors for different land covers)\n")
+                f.write("par_melt_factor          5.04        2.0          8.0        none\n")
+                f.write("par_min_melt_factor      2.2         1.0          4.0        none\n")
+                f.write("par_refreeze_factor      5.04        0.5          8.0        none\n")
+                f.write("par_forest_coverage      1.0         0.3          1.0        none\n")
+                f.write("EndParams\n\n")
+                
+                f.write("BeginTiedParams\nEndTiedParams\n\n")
+                
+                f.write("BeginResponseVars\n")
+                f.write("NS obj1.txt ; OST_NULL 1 ' ' ; keyword\n")
+                f.write("EndResponseVars\n\n")
+                
+                f.write("BeginTiedRespVars\nEndTiedRespVars\n\n")
+                
+                f.write("BeginGCOP\n")
+                f.write("CostFunction NS\n")
+                f.write("PenaltyFunction APM\n")
+                f.write("EndGCOP\n\n")
+                
+                f.write("BeginConstraints\nEndConstraints\n\n")
+                
+                f.write("# DDS Algorithm Parameters\n")
+                f.write("BeginDDS\n")
+                f.write("PerturbationValue 0.2\n")
+                f.write("MaxIterations 200\n")
+                f.write("EndDDS\n\n")
+                
+                f.write("RandomSeed 123\n")
+            
+            # Create RAVEN run batch file
+            batch_file = calibration_dir / "raven_run.bat"
+            with open(batch_file, 'w') as f:
+                f.write("@echo off\n")
+                f.write("REM RAVEN run script for OSTRICH calibration\n")
+                f.write("echo Running RAVEN model...\n")
+                f.write(f'"E:\\python\\Raven\\RavenHydroFramework\\build\\Release\\Raven.exe" {model_name} -o output\\\n')
+                f.write("if %errorlevel% neq 0 (\n")
+                f.write("    echo RAVEN run failed with error level %errorlevel%\n")
+                f.write("    exit /b %errorlevel%\n")
+                f.write(")\n")
+                f.write("echo RAVEN run completed successfully\n")
+            
+            result['success'] = True
+            return result
+            
+        except Exception as e:
+            result['error'] = f"Failed to create OSTRICH config: {str(e)}"
+            return result
+    
+    def _create_soil_landuse_templates(self, calibration_dir: Path, model_name: str) -> Dict[str, Any]:
+        """Create template file for soil and land use parameter substitution"""
+        result = {'success': False, 'error': None}
+        
+        try:
+            # Read the original .rvp file
+            original_rvp = calibration_dir / f"{model_name}.rvp"
+            template_rvp = calibration_dir / f"{model_name}_template.rvp"
+            
+            if not original_rvp.exists():
+                result['error'] = f"Original RVP file not found: {original_rvp}"
+                return result
+            
+            # Copy and modify for template
+            shutil.copy2(original_rvp, template_rvp)
+            
+            # Read and modify template file
+            with open(template_rvp, 'r') as f:
+                content = f.read()
+            
+            # Replace parameter values with OSTRICH parameter names
+            replacements = {
+                ':GlobalParameter RAINSNOW_TEMP 0.0': ':GlobalParameter RAINSNOW_TEMP par_rainsnow_temp',
+                ':GlobalParameter ADIABATIC_LAPSE 6.5': ':GlobalParameter ADIABATIC_LAPSE par_adiabatic_lapse', 
+                ':GlobalParameter PRECIP_LAPSE 0.0': ':GlobalParameter PRECIP_LAPSE par_precip_lapse',
+                ':GlobalParameter SNOW_SWI 0.05': ':GlobalParameter SNOW_SWI par_snow_swi',
+                ':GlobalParameter AIRSNOW_COEFF 0.05': ':GlobalParameter AIRSNOW_COEFF par_airsnow_coeff',
+                # Soil parameter replacements for LOAM
+                'LOAM         0.450 0.220 0.080': 'LOAM         par_porosity par_field_capacity par_wilting_point',
+                # Land use parameter replacements
+                '[DEFAULT]  , 5.04,       2.2,            0.45,              5.04,           0.48': '[DEFAULT]  , par_melt_factor, par_min_melt_factor, 0.45, par_refreeze_factor, 0.48',
+                'FOREST_CONIFEROUS 0.000 1.000': 'FOREST_CONIFEROUS 0.000 par_forest_coverage'
+            }
+            
+            for old, new in replacements.items():
+                content = content.replace(old, new)
+            
+            # Write modified template
+            with open(template_rvp, 'w') as f:
+                f.write(content)
+            
+            result['success'] = True
+            return result
+            
+        except Exception as e:
+            result['error'] = f"Failed to create templates: {str(e)}"
+            return result
+
     def _create_advanced_ostrich_config(self, config_path: Path, model_dir: Path, 
                                       model_name: str, step5_data: Dict[str, Any], 
                                       obs_data: Dict[str, Any]) -> Dict[str, Any]:
