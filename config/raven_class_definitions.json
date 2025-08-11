@@ -34,6 +34,18 @@
       "to": "MULTIPLE"
     },
     {
+      "name": "CanopyEvaporation",
+      "method": "CANEVP_ALL",
+      "from": "CANOPY",
+      "to": "ATMOSPHERE"
+    },
+    {
+      "name": "CanopySnowEvap", 
+      "method": "CANEVP_ALL",
+      "from": "CANOPY_SNOW",
+      "to": "ATMOSPHERE"
+    },
+    {
       "name": "SnowBalance",
       "method": "SNOBAL_SIMPLE_MELT",
       "from": "SNOW",
@@ -45,10 +57,36 @@
       }
     },
     {
+      "name": "Flush",
+      "method": "RAVEN_DEFAULT",
+      "from": "PONDED_WATER",
+      "to": "GLACIER",
+      "conditional": "HRU_TYPE IS GLACIER"
+    },
+    {
+      "name": "GlacierMelt",
+      "method": "GMELT_HBV",
+      "from": "GLACIER_ICE",
+      "to": "GLACIER"
+    },
+    {
+      "name": "GlacierRelease",
+      "method": "GRELEASE_HBV_EC",
+      "from": "GLACIER",
+      "to": "SURFACE_WATER"
+    },
+    {
       "name": "Infiltration", 
       "method": "INF_HBV",
       "from": "PONDED_WATER",
       "to": "MULTIPLE"
+    },
+    {
+      "name": "Flush",
+      "method": "RAVEN_DEFAULT",
+      "from": "SURFACE_WATER",
+      "to": "FAST_RESERVOIR",
+      "conditional": "HRU_TYPE IS_NOT GLACIER"
     },
     {
       "name": "SoilEvaporation",
@@ -58,9 +96,15 @@
     },
     {
       "name": "CapillaryRise",
-      "method": "CRISE_HBV", 
+      "method": "RISE_HBV", 
       "from": "FAST_RESERVOIR",
       "to": "SOIL[0]"
+    },
+    {
+      "name": "LakeEvaporation",
+      "method": "LAKE_EVAP_BASIC",
+      "from": "SLOW_RESERVOIR",
+      "to": "ATMOSPHERE"
     },
     {
       "name": "Percolation",

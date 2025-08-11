@@ -194,28 +194,44 @@ class LakesGenerator:
         primary_lake = lakes_group[0]
         hru_id = primary_lake.get('HRU_ID', primary_lake.get('HRUID', subbasin_id))
         
-        # Calculate composite lake area (sum of all lakes in subbasin)
-        total_area_m2 = 0
-        for lake_hru in lakes_group:
+        # Use primary HRU area to match RVH file (not composite sum)
+        # This prevents the "LakeArea and corresponding HRU area do not agree" warning
+        primary_lake_area_m2 = None
+        area_columns = ['HRU_Area', 'LakeArea', 'Area_km2', 'AREA', 'area', 'area_km2']
+        for col in area_columns:
+            if col in primary_lake.index and pd.notna(primary_lake[col]):
+                area_value = float(primary_lake[col])
+                # Convert km² columns to m²
+                if col in ['Area_km2', 'HRU_Area', 'area_km2', 'AREA']:  # These are in km²
+                    primary_lake_area_m2 = area_value * 1000000  # Convert km² to m²
+                else:
+                    primary_lake_area_m2 = area_value  # Already in m² (BasinMaker format)
+                break
+        
+        # If no area column found, calculate from geometry
+        if primary_lake_area_m2 is None:
+            if hasattr(primary_lake, 'geometry') and primary_lake.geometry is not None:
+                primary_lake_area_m2 = primary_lake.geometry.area  # Keep in m²
+            else:
+                primary_lake_area_m2 = 100000  # Default 0.1 km² = 100,000 m²
+        
+        # For logging purposes, still calculate total area
+        total_area_m2 = primary_lake_area_m2
+        for lake_hru in lakes_group[1:]:  # Skip first (primary) lake
             lake_area_m2 = None
-            area_columns = ['HRU_Area', 'LakeArea', 'Area_km2', 'AREA', 'area', 'area_km2']
             for col in area_columns:
                 if col in lake_hru.index and pd.notna(lake_hru[col]):
                     area_value = float(lake_hru[col])
-                    # Convert km² columns to m²
-                    if col in ['Area_km2', 'HRU_Area', 'area_km2', 'AREA']:  # These are in km²
-                        lake_area_m2 = area_value * 1000000  # Convert km² to m²
+                    if col in ['Area_km2', 'HRU_Area', 'area_km2', 'AREA']:
+                        lake_area_m2 = area_value * 1000000
                     else:
-                        lake_area_m2 = area_value  # Already in m² (BasinMaker format)
+                        lake_area_m2 = area_value
                     break
-            
-            # If no area column found, calculate from geometry
             if lake_area_m2 is None:
                 if hasattr(lake_hru, 'geometry') and lake_hru.geometry is not None:
-                    lake_area_m2 = lake_hru.geometry.area  # Keep in m²
+                    lake_area_m2 = lake_hru.geometry.area
                 else:
-                    lake_area_m2 = 100000  # Default 0.1 km² = 100,000 m²
-            
+                    lake_area_m2 = 100000
             total_area_m2 += lake_area_m2
         
         # BasinMaker logic: Get hydraulic parameters
@@ -240,7 +256,7 @@ class LakesGenerator:
         f.write("  :WeirCoefficient 0.6\n")                           # BasinMaker standard
         f.write(f"  :CrestWidth {crest_width}\n")                     # Default
         f.write(f"  :MaxDepth {max_depth}\n")                         # Default  
-        f.write(f"  :LakeArea {int(total_area_m2)}\n")                # Composite area in m²
+        f.write(f"  :LakeArea {int(primary_lake_area_m2)}\n")          # Primary HRU area in m² (matches RVH)
         f.write("  :SeepageParameters 0 0\n")                        # BasinMaker always includes
         
         # BasinMaker power law for gauged lakes

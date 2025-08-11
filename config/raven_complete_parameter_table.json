@@ -64,6 +64,23 @@
           "PET_MONTHLY_FACTOR"
         ],
         "default": "PET_HARGREAVES_1985"
+      },
+
+      "model_options": {
+        "CatchmentRoute": "TRIANGULAR_UH",
+        "OW_Evaporation": "PET_FROMMONTHLY", 
+        "SWRadiationMethod": "SW_RAD_DEFAULT",
+        "SWCloudCorrect": "SW_CLOUD_CORR_NONE",
+        "SWCanopyCorrect": "SW_CANOPY_CORR_NONE",
+        "LWRadiationMethod": "LW_RAD_DEFAULT",
+        "RainSnowFraction": "RAINSNOW_HBV",
+        "PotentialMeltMethod": "POTMELT_HBV",
+        "OroTempCorrect": "OROCORR_HBV",
+        "OroPrecipCorrect": "OROCORR_HBV",
+        "OroPETCorrect": "OROCORR_HBV",
+        "CloudCoverMethod": "CLOUDCOV_NONE",
+        "PrecipIceptFract": "PRECIP_ICEPT_USER",
+        "MonthlyInterpolationMethod": "MONTHINT_LINEAR_21"
       }
     },
 
@@ -263,6 +280,20 @@
       }
     },
 
+    "landuse_parameters": {
+      "snow_melt": {
+        "MELT_FACTOR": {"units": "mm/d/K", "default": 5.04},
+        "MIN_MELT_FACTOR": {"units": "mm/d/K", "default": 2.2},
+        "HBV_MELT_FOR_CORR": {"units": "none", "default": 0.45},
+        "REFREEZE_FACTOR": {"units": "mm/d/K", "default": 5.04},
+        "HBV_MELT_ASP_CORR": {"units": "none", "default": 0.48},
+        "HBV_MELT_GLACIER_CORR": {"units": "none", "default": 1.64},
+        "HBV_GLACIER_KMIN": {"units": "1/d", "default": 0.05},
+        "GLAC_STORAGE_COEFF": {"units": "1/d", "default": 0.05},
+        "HBV_GLACIER_AG": {"units": "1/mm", "default": 0.05}
+      }
+    },
+
     "terrain_classes": {
       "attributes": [
         "HILLSLOPE_TRAVEL_TIME", "DRAINAGE_DENSITY", "TOPMODEL_LAMBDA",
@@ -307,7 +338,8 @@
         "RAINSNOW_DELTA": {"units": "C", "default": 2.0},
         "TOC_MULTIPLIER": {"units": "none", "default": 1.0},
         "ADIABATIC_LAPSE": {"units": "C/km", "default": 6.5},
-        "WET_ADIABATIC_LAPSE": {"units": "C/km", "default": 4.9}
+        "WET_ADIABATIC_LAPSE": {"units": "C/km", "default": 4.9},
+        "PRECIP_LAPSE": {"units": "mm/km", "default": 0.0}
       },
       "snow": {
         "SNOW_SWI": {"units": "none", "default": 0.05},

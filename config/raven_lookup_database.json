@@ -314,7 +314,9 @@
           "max_lai": 6.0,
           "max_leaf_conductance": 15.0,
           "forest_coverage": 0.85,
-          "imperviousness": 0.0
+          "imperviousness": 0.0,
+          "melt_factor": 3.5,
+          "refreeze_factor": 3.2
         },
         "seasonal_variation": {
           "lai_winter": 4.0,
@@ -444,7 +446,9 @@
           "max_lai": 3.0,
           "max_leaf_conductance": 20.0,
           "forest_coverage": 0.0,
-          "imperviousness": 0.0
+          "imperviousness": 0.0,
+          "melt_factor": 5.0,
+          "refreeze_factor": 4.0
         },
         "seasonal_variation": {
           "lai_winter": 0.8,
@@ -574,7 +578,9 @@
           "max_lai": 0.0,
           "max_leaf_conductance": 0.0,
           "forest_coverage": 0.0,
-          "imperviousness": 1.0
+          "imperviousness": 1.0,
+          "melt_factor": 4.5,
+          "refreeze_factor": 4.5
         },
         "seasonal_variation": {
           "lai_winter": 0.0,

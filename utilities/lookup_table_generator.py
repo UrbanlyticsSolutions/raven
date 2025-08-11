@@ -80,26 +80,40 @@ class RAVENLookupTableGenerator:
     def generate_landuse_info_csv(self, output_file: str = None) -> str:
         """
         Generate landuse_info.csv for BasinMaker compatibility  
-        Format: Landuse_ID,LAND_USE_C
+        Format: Landuse_ID,LAND_USE_C,MELT_FACTOR,REFREEZE_FACTOR
         """
         if output_file is None:
             output_file = self.output_dir / "landuse_info.csv"
         
         # Get landcover classification data
         mapping = self.database["landcover_classification"]["basinmaker_format"]["example_mapping"]
+        landcover_classes = self.database["landcover_classification"]["landcover_classes"]
         
-        # Create DataFrame
+        # Create DataFrame with enhanced parameters
         data = []
         for landuse_id, land_use_c in mapping.items():
+            # Get melt parameters from the landcover class definition
+            melt_factor = 5.04  # Default
+            refreeze_factor = 5.04  # Default
+            
+            if land_use_c in landcover_classes:
+                class_info = landcover_classes[land_use_c]
+                if "raven_parameters" in class_info:
+                    raven_params = class_info["raven_parameters"]
+                    melt_factor = raven_params.get("melt_factor", 5.04)
+                    refreeze_factor = raven_params.get("refreeze_factor", 5.04)
+            
             data.append({
                 'Landuse_ID': int(landuse_id),
-                'LAND_USE_C': land_use_c
+                'LAND_USE_C': land_use_c,
+                'MELT_FACTOR': melt_factor,
+                'REFREEZE_FACTOR': refreeze_factor
             })
         
         df = pd.DataFrame(data).sort_values('Landuse_ID')
         df.to_csv(output_file, index=False)
         
-        self.logger.info(f"Generated landuse_info.csv: {output_file} ({len(df)} landuse classes)")
+        self.logger.info(f"Generated landuse_info.csv: {output_file} ({len(df)} landuse classes with MELT/REFREEZE factors)")
         return str(output_file)
     
     def generate_veg_info_csv(self, output_file: str = None) -> str:
