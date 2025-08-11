@@ -170,25 +170,65 @@ class RVPGenerator:
                                slope: float, elevation: float, flood_n: float,
                                channel_n: float, calculate_manning_n: bool) -> str:
         """
-        Generate channel profile section for individual subbasin
+        Generate channel profile section using complete BasinMaker logic
         EXTRACTED FROM: Generate_Raven_Channel_rvp_string_sub() in BasinMaker
         """
+        
+        # BasinMaker trapezoidal channel geometry constants
+        zch = 2                    # Side slope ratio (2:1 horizontal:vertical)
+        sidwdfp = 4 / 0.25        # Fixed floodplain width = 16m each side (total 32m)
+        
+        # Calculate trapezoidal geometry
+        sidwd = zch * depth
+        botwd = width - 2 * sidwd
+        
+        # Handle narrow channels (BasinMaker logic)
+        if botwd < 0:
+            botwd = 0.5 * width
+            sidwd = 0.5 * 0.5 * width
+            zch = (width - botwd) / 2 / depth if depth > 0 else 2
+        
+        # Elevation calculations
+        zfld = 4 + elevation      # Fixed 4m flood depth above channel elevation
+        zbot = elevation - depth  # Channel bottom elevation
+        
+        # BasinMaker 8-point survey pattern
+        x0 = 0.0                                           # Left floodplain start
+        x1 = sidwdfp                                       # Left floodplain edge (16m)
+        x2 = sidwdfp + sidwd                              # Left bank top
+        x3 = sidwdfp + sidwd + botwd                      # Left bank bottom
+        x4 = sidwdfp + sidwd + botwd                      # Right bank bottom (same as x3)
+        x5 = sidwdfp + sidwd + botwd + botwd              # Right bank top
+        x6 = sidwdfp + sidwd + botwd + botwd + sidwd      # Right floodplain edge
+        x7 = sidwdfp + sidwd + botwd + botwd + sidwd + sidwdfp  # Right floodplain end
         
         lines = []
         lines.append("##############new channel ##############################")
         lines.append(f":ChannelProfile {channel_name}")
-        lines.append(f"     :Bedslope        {slope:.6f}")
-        lines.append(f"     :SurveyPoints")
-        lines.append(f"       0.0    {elevation:.2f}")
-        lines.append(f"       {width/2:.2f}    {elevation - depth:.2f}")
-        lines.append(f"       {width:.2f}    {elevation:.2f}")
-        lines.append(f"     :EndSurveyPoints")
-        lines.append(f"     :RoughnessZones")
-        lines.append(f"       0.0    {flood_n:.3f}")
-        lines.append(f"       {width/2:.2f}    {channel_n:.3f}")
-        lines.append(f"       {width:.2f}    {flood_n:.3f}")
-        lines.append(f"     :EndRoughnessZones")
-        lines.append(f":EndChannelProfile")
+        lines.append(f"  :Bedslope {slope:.6f}")
+        lines.append("  :SurveyPoints")
+        lines.append("    # Channel cross-section with extended flood capacity (BasinMaker)")
+        
+        # BasinMaker 8-point survey geometry
+        lines.append(f"    {x0:.1f} {zfld:.2f}")    # Left floodplain start
+        lines.append(f"    {x1:.1f} {elevation:.2f}")    # Left floodplain edge
+        lines.append(f"    {x2:.1f} {elevation:.2f}")    # Left bank top
+        lines.append(f"    {x3:.1f} {zbot:.2f}")    # Left bank bottom
+        lines.append(f"    {x4:.1f} {zbot:.2f}")    # Right bank bottom
+        lines.append(f"    {x5:.1f} {elevation:.2f}")    # Right bank top
+        lines.append(f"    {x6:.1f} {elevation:.2f}")    # Right floodplain edge
+        lines.append(f"    {x7:.1f} {zfld:.2f}")    # Right floodplain end
+        
+        lines.append("  :EndSurveyPoints")
+        lines.append("  :RoughnessZones")
+        
+        # BasinMaker 3-zone roughness pattern
+        lines.append(f"    {x0:.1f} {flood_n:.4f}")    # Left floodplain Manning's n
+        lines.append(f"    {x2:.1f} {channel_n:.4f}")  # Channel Manning's n
+        lines.append(f"    {x6:.1f} {flood_n:.4f}")    # Right floodplain Manning's n
+        
+        lines.append("  :EndRoughnessZones")
+        lines.append(":EndChannelProfile")
         
         return "\n".join(lines)
     

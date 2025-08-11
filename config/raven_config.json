@@ -122,9 +122,10 @@
   "hydrological_processes": [
     "PRECIPITATION",
     "CANOPY_EVAP", 
+    "CANOPY_SNOW_EVAP",
     "INFILTRATION",
     "EVAPORATION",
-    "TRANSPIRATION",
+    "TRANSPIRATION", 
     "SNOWFALL",
     "SNOWMELT",
     "PERCOLATION",

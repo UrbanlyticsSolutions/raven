@@ -512,40 +512,58 @@ class Step5RAVENModel:
         
         output_lines = []
         
-        # Trapezoidal channel with sides depth:width ratio of 2 (BasinMaker logic)
-        zch = 2
+        # BasinMaker trapezoidal channel geometry constants - EXACT BASINMAKER VALUES
+        zch = 2                    # Side slope ratio (2:1 horizontal:vertical)
+        sidwdfp = 16              # Exact BasinMaker floodplain width = 16m each side (total 32m)
+        
+        # Calculate trapezoidal geometry
         sidwd = zch * chdep
-        tab = "          "
         botwd = chwd - 2 * sidwd
         
+        # Handle narrow channels (BasinMaker logic)
         if botwd < 0:
             botwd = 0.5 * chwd
             sidwd = 0.5 * 0.5 * chwd
-            zch = (chwd - botwd) / 2 / chdep
+            zch = (chwd - botwd) / 2 / chdep if chdep > 0 else 2
         
-        mann = f'{channeln:>10.8f}'
-        zfld = 4 + elev
-        zbot = elev - chdep
-        sidwdfp = 4 / 0.25
+        # Elevation calculations - EXACT BASINMAKER flood capacity
+        zfld = 4 + elev           # Exact BasinMaker 4m flood depth above channel elevation
+        zbot = elev - chdep       # Channel bottom elevation
+        
+        # BasinMaker 8-point survey pattern
+        x0 = 0.0                                           # Left floodplain start
+        x1 = sidwdfp                                       # Left floodplain edge (16m)
+        x2 = sidwdfp + sidwd                              # Left bank top
+        x3 = sidwdfp + sidwd + botwd                      # Left bank bottom
+        x4 = sidwdfp + sidwd + botwd                      # Right bank bottom (same as x3)
+        x5 = sidwdfp + sidwd + botwd + botwd              # Right bank top
+        x6 = sidwdfp + sidwd + botwd + botwd + sidwd      # Right floodplain edge
+        x7 = sidwdfp + sidwd + botwd + botwd + sidwd + sidwdfp  # Right floodplain end
         
         # Channel profile header
-        output_lines.append(f":ChannelProfile{tab}{chname}{tab}")
-        output_lines.append(f"  :Bedslope{tab}{chslope:>15.10f}")
+        output_lines.append(f":ChannelProfile {chname}")
+        output_lines.append(f"  :Bedslope {chslope:.6f}")
         output_lines.append("  :SurveyPoints")
+        output_lines.append("    # Channel cross-section with extended flood capacity")
         
-        # Survey points (BasinMaker trapezoidal geometry)
-        output_lines.append(f"    0{tab}{zfld:>10.4f}")
-        output_lines.append(f"    {sidwdfp:>10.4f}{tab}{elev:>10.4f}")
-        output_lines.append(f"    {sidwdfp + 2 * chwd:>10.4f}{tab}{elev:>10.4f}")
-        output_lines.append(f"    {sidwdfp + 2 * chwd + sidwd:>10.4f}{tab}{zbot:>10.4f}")
-        output_lines.append(f"    {sidwdfp + 2 * chwd + sidwd + botwd:>10.4f}{tab}{zbot:>10.4f}")
-        output_lines.append(f"    {sidwdfp + 2 * chwd + 2 * sidwd + botwd:>10.4f}{tab}{elev:>10.4f}")
-        output_lines.append(f"    {sidwdfp + 4 * chwd + 2 * sidwd + botwd:>10.4f}{tab}{elev:>10.4f}")
-        output_lines.append(f"    {2 * sidwdfp + 4 * chwd + 2 * sidwd + botwd:>10.4f}{tab}{zfld:>10.4f}")
+        # BasinMaker 8-point survey geometry
+        output_lines.append(f"    {x0:.1f} {zfld:.2f}")    # Left floodplain start
+        output_lines.append(f"    {x1:.1f} {elev:.2f}")    # Left floodplain edge
+        output_lines.append(f"    {x2:.1f} {elev:.2f}")    # Left bank top
+        output_lines.append(f"    {x3:.1f} {zbot:.2f}")    # Left bank bottom
+        output_lines.append(f"    {x4:.1f} {zbot:.2f}")    # Right bank bottom
+        output_lines.append(f"    {x5:.1f} {elev:.2f}")    # Right bank top
+        output_lines.append(f"    {x6:.1f} {elev:.2f}")    # Right floodplain edge
+        output_lines.append(f"    {x7:.1f} {zfld:.2f}")    # Right floodplain end
         
         output_lines.append("  :EndSurveyPoints")
         output_lines.append("  :RoughnessZones")
-        output_lines.append(f"    0{tab}{mann}")
+        
+        # BasinMaker 3-zone roughness pattern
+        output_lines.append(f"    {x0:.1f} {floodn:.4f}")    # Left floodplain Manning's n
+        output_lines.append(f"    {x2:.1f} {channeln:.4f}")  # Channel Manning's n
+        output_lines.append(f"    {x6:.1f} {floodn:.4f}")    # Right floodplain Manning's n
+        
         output_lines.append("  :EndRoughnessZones")
         output_lines.append(":EndChannelProfile")
         
@@ -855,15 +873,19 @@ class Step5RAVENModel:
                 if len(outlet_subbasin) > 0:
                     subbasin_id = int(outlet_subbasin.iloc[0]['SubId'])
                     
-                    # Generate BasinMaker format observation RVT
+                    # Generate BasinMaker format observation RVT exactly like RavenInput.py
                     lines = [f':ObservationData HYDROGRAPH {subbasin_id}   m3/s']
                     
+                    # Add header line with start date and count (BasinMaker format)
+                    start_date = df['Date'].min().strftime('%Y-%m-%d')
+                    num_records = len(df)
+                    lines.append(f'{start_date}  00:00:00  1     {num_records}')
+                    
                     for _, row in df.iterrows():
-                        date_str = row['Date'].strftime('%Y-%m-%d')
                         discharge = row['Discharge_cms']
                         if pd.isna(discharge):
                             discharge = -1.2345  # BasinMaker NoData value
-                        lines.append(f'{date_str}  0:00:00  1  {discharge:.6f}')
+                        lines.append(f'         {discharge:.6f}')
                     
                     lines.append(':EndObservationData')
                     
