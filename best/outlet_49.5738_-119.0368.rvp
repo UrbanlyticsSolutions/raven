@@ -1,0 +1,82 @@
+# RAVEN Parameter file for outlet_49.5738_-119.0368
+# Generated using RAVEN benchmark format
+
+:SoilClasses
+  :Attributes
+  :Units
+  LOAM_TOP
+  LOAM_FAST
+  LOAM_SLOW
+  SANDY_LOAM_TOP
+  SANDY_LOAM_FAST
+  SANDY_LOAM_SLOW
+:EndSoilClasses
+
+:SoilProfiles
+  LOAM 3 LOAM_TOP 0.076 LOAM_FAST 0.109 LOAM_SLOW 5.000
+  SANDY_LOAM 3 SANDY_LOAM_TOP 0.076 SANDY_LOAM_FAST 0.109 SANDY_LOAM_SLOW 5.000
+:EndSoilProfiles
+
+:VegetationClasses
+  :Attributes MAX_HT MAX_LAI MAX_LEAF_COND
+  :Units      m      none    mm_per_s
+  CONIFEROUS     25.0      5.0           5.0
+  GRASSLAND_VEG    3.0      4.0           5.0
+:EndVegetationClasses
+
+# Global Parameters
+:GlobalParameter RAINSNOW_TEMP 0.0
+:GlobalParameter RAINSNOW_DELTA 2.0
+:GlobalParameter ADIABATIC_LAPSE 6.5
+:GlobalParameter PRECIP_LAPSE 0.0
+:GlobalParameter SNOW_SWI 0.05
+:GlobalParameter AIRSNOW_COEFF 0.05
+
+:VegetationParameterList
+  :Parameters,  MAX_CAPACITY, MAX_SNOW_CAPACITY,  TFRAIN,  TFSNOW, RELATIVE_LAI
+  :Units,                 mm,                mm,    frac,    frac,        none
+  CONIFEROUS              5               7      0.88     0.88 1.0 1.0 1.0 1.0 1.0 1.0 1.0 1.0 1.0 1.0 1.0 1.0
+  GRASSLAND_VEG            5               7      0.95     0.95 1.0 1.0 1.0 1.0 1.0 1.0 1.0 1.0 1.0 1.0 1.0 1.0
+:EndVegetationParameterList
+
+:LandUseClasses
+  :Attributes IMPERM FOREST_COV
+  :Units      frac   frac
+  FOREST_CONIFEROUS 0.0 1.0
+  GRASSLAND    0.0 0.1
+:EndLandUseClasses
+
+:SoilParameterList
+  :Parameters,        POROSITY,  PET_CORRECTION,        HBV_BETA,          MAX_PERC_RATE,  BASEFLOW_COEFF,      BASEFLOW_N, MAX_CAP_RISE_RATE
+       :Units,               -,               -,               -,               -,               -,                        -,              mm/d
+         LOAM_TOP,              0.4,              1.0,              8.000,             18.93,              0,                                0,               2.5,
+         LOAM_FAST,              0.4,              7.615027E-01,              3.646930E+00,             7.606295E+00,              4.582552E-01,               9.744,     3.5,
+         LOAM_SLOW,              0.4,              1.0,              3.646930E+00,             0,                         0.025,               9.744,     1.0,
+         SANDY_LOAM_TOP,              0.4,              1.0,              3.646930E+00,             7.606295E+00,              0,                                0,               2.5,
+         SANDY_LOAM_FAST,              0.4,              7.615027E-01,              3.646930E+00,             7.606295E+00,              4.582552E-01,               9.744,     3.5,
+         SANDY_LOAM_SLOW,              0.4,              1.0,              8.000,             0,                         0.025,               9.744,     1.0,
+:EndSoilParameterList
+# Land Use Classes Parameters (Generated from RAVEN Parameter Table)
+
+:LandUseClasses
+  :Attributes IMPERM FOREST_COV
+  :Units      frac   frac
+  FOREST_CONIFEROUS 0.000 4.680065E-01
+  GRASSLAND       0.000 0.100
+:EndLandUseClasses
+
+:LandUseParameterList
+  :Parameters, MELT_FACTOR, MIN_MELT_FACTOR, HBV_MELT_FOR_CORR, REFREEZE_FACTOR, HBV_MELT_ASP_CORR
+  :Units     , mm/d/K,     mm/d/K,         none,              mm/d/K,         none
+  [DEFAULT]  , 1.866831E+00, 1.55, 0.45, 2.774133E+00, 0.48
+:EndLandUseParameterList
+
+:LandUseParameterList
+ :Parameters, HBV_MELT_GLACIER_CORR,   HBV_GLACIER_KMIN, GLAC_STORAGE_COEFF, HBV_GLACIER_AG
+ :Units     ,                  none,                1/d,                1/d,           1/mm
+   [DEFAULT],                  1.64,               0.05,          0.6771759,           0.05
+:EndLandUseParameterList
+
+:AvgAnnualRunoff 300.0
+
+:RedirectToFile channel_properties.rvp

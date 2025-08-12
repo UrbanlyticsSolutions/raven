@@ -51,11 +51,19 @@ from shapely.validation import make_valid
 def prepare_lakes_shapefile(data_dir: Path) -> Path:
     """Use the correct filtered lakes from step 3: lakes_with_routing_ids.shp"""
     lakes_path = data_dir / "lakes_with_routing_ids.shp"
+    
+    # Check if lakes exist - if not, return None (no lakes case)
     if not lakes_path.exists():
-        raise FileNotFoundError(f"Filtered lakes shapefile not found: {lakes_path}")
+        print("No lakes shapefile found - proceeding without lakes")
+        return None
     
     print("Preparing filtered lakes shapefile from step 3...")
     lakes_gdf = gpd.read_file(lakes_path)
+    
+    # If empty lakes file, return None
+    if len(lakes_gdf) == 0:
+        print("Lakes shapefile is empty - proceeding without lakes")
+        return None
     
     # Rename lake_id to HyLakeId if needed
     if 'lake_id' in lakes_gdf.columns and 'HyLakeId' not in lakes_gdf.columns:
@@ -78,7 +86,7 @@ def create_landuse_shapefile(data_dir: Path) -> Path:
     import numpy as np
     from shapely.geometry import shape
     
-    landcover_path = data_dir / "landcover_georeferenced.tif"
+    landcover_path = data_dir / "landcover.tif"
     landuse_path = data_dir / "landuse.shp"
     
     print("Creating landuse shapefile from landcover raster...")
@@ -338,9 +346,34 @@ def polygonize_raster_per_subbasin(raster_path: Path, subbasins_gdf: gpd.GeoData
         if polys_gdf.crs != target_crs:
             polys_gdf = polys_gdf.to_crs(target_crs)
         
+        print(f"  Created {len(all_polys)} raw polygons, now dissolving by class...")
+        
+        # CRITICAL FIX: Dissolve by landuse class within each subbasin to reduce polygon count
+        from processors.polygon_overlay import PolygonOverlayProcessor
+        overlay_processor = PolygonOverlayProcessor()
+        
+        # Group by SubId and dissolve by landuse class
+        dissolved_polys = []
+        for subid in polys_gdf['SubId'].unique():
+            sub_polys = polys_gdf[polys_gdf['SubId'] == subid].copy()
+            
+            # Dissolve by landuse class within this subbasin
+            dissolved_sub = overlay_processor.dissolve_by_attribute(sub_polys, class_col)
+            dissolved_polys.append(dissolved_sub)
+        
+        # Combine all dissolved polygons
+        if dissolved_polys:
+            polys_gdf = pd.concat(dissolved_polys, ignore_index=True)
+        
+        # Apply minimum area filter (BasinMaker approach)
+        MIN_AREA_M2 = 1000  # 1000 m² minimum area
+        polys_gdf['area_m2'] = polys_gdf.geometry.area
+        polys_gdf = polys_gdf[polys_gdf['area_m2'] >= MIN_AREA_M2].copy()
+        polys_gdf = polys_gdf.drop(columns=['area_m2'])
+        
         # Save results
         polys_gdf.to_file(output_path)
-        print(f"  Created {len(all_polys)} polygons across {len(subbasins_gdf)} subbasins")
+        print(f"  Final result: {len(polys_gdf)} dissolved polygons across {len(subbasins_gdf)} subbasins")
         print(f"  Saved to: {output_path}")
         
         return output_path
@@ -364,7 +397,14 @@ def validate_file_overlays(subbasins_path: Path, lakes_path: Path, landuse_path:
     }
     
     for name, path in files_to_check.items():
-        if not path.exists():
+        if path is None:
+            if name == 'Lakes':
+                print(f"  {name}: No lakes file (OK - proceeding without lakes)")
+                continue
+            else:
+                validation_results['errors'].append(f"{name} file is None")
+                validation_results['success'] = False
+        elif not path.exists():
             validation_results['errors'].append(f"{name} file not found: {path}")
             validation_results['success'] = False
     
@@ -375,9 +415,14 @@ def validate_file_overlays(subbasins_path: Path, lakes_path: Path, landuse_path:
     print("Checking CRS consistency...")
     
     subbasins_gdf = gpd.read_file(subbasins_path)
-    lakes_gdf = gpd.read_file(lakes_path)
     landuse_gdf = gpd.read_file(landuse_path)
     soil_gdf = gpd.read_file(soil_path)
+    
+    # Handle lakes - may be None
+    if lakes_path is not None:
+        lakes_gdf = gpd.read_file(lakes_path)
+    else:
+        lakes_gdf = gpd.GeoDataFrame(columns=['HyLakeId', 'geometry'], crs=subbasins_gdf.crs)
     
     with rasterio.open(dem_path) as dem_src:
         dem_crs = dem_src.crs
@@ -520,7 +565,7 @@ def create_landuse_shapefile_enhanced(data_dir: Path, lookup_generator: RAVENLoo
     import numpy as np
     from shapely.geometry import shape
     
-    landcover_path = data_dir / "landcover_georeferenced.tif"
+    landcover_path = data_dir / "landcover.tif"
     landuse_path = data_dir / "landuse_enhanced.shp"
     
     print("Creating enhanced landuse shapefile from comprehensive lookup database...")
@@ -716,7 +761,7 @@ def generate_hrus_clean(workspace_dir: Path, latitude: float, longitude: float) 
     # Step 2: Create landuse shapefile using dynamic classification
     print("Creating landuse polygons with dynamic classification...")
     subbasins_gdf = gpd.read_file(subbasins_path)
-    landcover_raster = data_dir / "landcover_georeferenced.tif"
+    landcover_raster = data_dir / "landcover.tif"
     
     if landcover_raster.exists():
         landuse_path = polygonize_raster_per_subbasin(
@@ -765,7 +810,13 @@ def generate_hrus_clean(workspace_dir: Path, latitude: float, longitude: float) 
     landuse_gdf = gpd.read_file(landuse_path)        # has SubId, Landuse_ID, LAND_USE_C, VEG_C
     soil_gdf    = gpd.read_file(soil_path)           # has Soil_ID, SOIL_PROF
     subs_gdf    = gpd.read_file(subbasins_path)      # has SubId
-    lakes_gdf   = gpd.read_file(lakes_path)          # has HyLakeId
+    
+    # Handle lakes - may be None if no lakes exist
+    if lakes_path is not None:
+        lakes_gdf = gpd.read_file(lakes_path)          # has HyLakeId
+    else:
+        # Create empty lakes GeoDataFrame with correct CRS
+        lakes_gdf = gpd.GeoDataFrame(columns=['HyLakeId', 'geometry'], crs=subs_gdf.crs)
 
     # 1) Ensure common CRS
     target_crs = subs_gdf.crs
@@ -783,24 +834,34 @@ def generate_hrus_clean(workspace_dir: Path, latitude: float, longitude: float) 
     # 3) Landuse is already per-subbasin (from polygonize_raster_per_subbasin)
     landuse_in_subs = landuse_gdf
 
-    # 4) Build HRU candidates = landuse × soil inside each subbasin
-    print("  Creating landuse × soil intersections...")
+    # 4) Build HRU candidates using BasinMaker overlay logic
+    print("  Creating landuse × soil intersections using BasinMaker logic...")
+    from processors.polygon_overlay import PolygonOverlayProcessor
+    overlay_processor = PolygonOverlayProcessor(data_dir)
+    
+    # Use intersection for HRU generation (landuse AND soil, not landuse OR soil)
     hru_candidates = gpd.overlay(landuse_in_subs, soil_in_subs, how='intersection')
+    # Apply BasinMaker geometry fixes to intersection result
+    hru_candidates = overlay_processor._fix_geometries(hru_candidates)
     
     # Fix duplicate SubId columns from overlay (SubId_1 and SubId_2 -> SubId)
     if 'SubId_1' in hru_candidates.columns:
         hru_candidates['SubId'] = hru_candidates['SubId_1']
         hru_candidates = hru_candidates.drop(columns=['SubId_1', 'SubId_2'], errors='ignore')
 
-    # 5) Carve out lakes: remove lake polygons from land HRUs
+    # 5) Carve out lakes using BasinMaker approach
     if len(lakes_gdf) > 0:
-        print("  Carving out lakes from land HRUs...")
+        print("  Carving out lakes using BasinMaker logic...")
+        # Remove lake areas from HRU candidates using difference operation
         lakes_union = lakes_gdf.union_all()
         hru_candidates['geometry'] = hru_candidates.geometry.difference(lakes_union)
         hru_candidates = hru_candidates[~hru_candidates.geometry.is_empty]
 
-    # 6) Drop tiny slivers (min HRU area)
-    MIN_HRU_KM2 = 0.01   # tune this or read from config
+    # 6) Apply BasinMaker geometry fixes and area filtering
+    print("  Applying BasinMaker geometry fixes...")
+    hru_candidates = overlay_processor._fix_geometries(hru_candidates)
+    
+    MIN_HRU_KM2 = 0.01
     hru_candidates['HRU_Area'] = hru_candidates.geometry.area / 1e6
     hru_candidates = hru_candidates[hru_candidates['HRU_Area'] >= MIN_HRU_KM2].copy()
 
@@ -810,8 +871,8 @@ def generate_hrus_clean(workspace_dir: Path, latitude: float, longitude: float) 
     hru_candidates.to_file(multi_hru_path)
     print(f"  Multi-HRU candidates: {len(hru_candidates)} polygons across {hru_candidates['SubId'].nunique()} subbasins")
     
-    # Update landuse_path to use the intersected multi-HRU polygons
-    landuse_path = multi_hru_path
+    # Keep the multi-HRU path separate - don't overwrite landuse_path
+    # landuse_path = multi_hru_path  # REMOVED - this was causing 349 HRUs instead of 25
     
     # Step 4: Validate all files before HRU generation
     validation_results = validate_file_overlays(subbasins_path, lakes_path, landuse_path, soil_path, dem_path)
@@ -835,7 +896,7 @@ def generate_hrus_clean(workspace_dir: Path, latitude: float, longitude: float) 
     sand_raster = data_dir / "sand_0-5cm_mean_bbox.tif"
     silt_raster = data_dir / "silt_0-5cm_mean_bbox.tif"
     clay_raster = data_dir / "clay_0-5cm_mean_bbox.tif"
-    landcover_raster = data_dir / "landcover_georeferenced.tif"
+    landcover_raster = data_dir / "landcover.tif"
     dem_raster = data_dir / "dem.tif"
     
     # Apply complete enhanced HRU class assignment
@@ -888,6 +949,23 @@ def generate_hrus_clean(workspace_dir: Path, latitude: float, longitude: float) 
         print(f"    Longitude range: {final_hrus['HRU_CenX'].min():.6f} to {final_hrus['HRU_CenX'].max():.6f}")
         print(f"    Latitude range: {final_hrus['HRU_CenY'].min():.6f} to {final_hrus['HRU_CenY'].max():.6f}")
     
+    # Apply BasinMaker HRU consolidation
+    print("  Applying BasinMaker HRU consolidation...")
+    from utilities.hru_consolidator import BasinMakerHRUConsolidator
+    
+    # Set consolidation parameters (BasinMaker defaults)
+    min_hru_pct_sub_area = 0.05  # 5% of subbasin area minimum (more aggressive)
+    importance_order = ['Landuse_ID', 'Soil_ID', 'Veg_ID']
+    
+    consolidator = BasinMakerHRUConsolidator(
+        min_hru_pct_sub_area=min_hru_pct_sub_area,
+        importance_order=importance_order
+    )
+    
+    # Apply consolidation to land HRUs
+    final_hrus = consolidator.consolidate_hrus(final_hrus)
+    print(f"    HRU consolidation complete: {len(final_hrus)} final HRUs")
+
     # Add lake HRUs if any
     if len(lakes_gdf) > 0:
         print("  Adding lake HRUs...")

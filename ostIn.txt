@@ -1,0 +1,57 @@
+ProgramType DDS
+
+ObjectiveFunction GCOP
+ModelExecutable Ost-RAVEN.bat
+PreserveBestModel save_best.bat
+
+BeginFilePairs
+outlet_49.5738_-119.0368.rvp.tpl ; outlet_49.5738_-119.0368.rvp
+EndFilePairs
+
+BeginExtraFiles
+outlet_49.5738_-119.0368.rvi
+outlet_49.5738_-119.0368.rvh
+outlet_49.5738_-119.0368.rvt
+outlet_49.5738_-119.0368.rvc
+channel_properties.rvp
+EndExtraFiles
+
+BeginExtraDirs
+obs
+EndExtraDirs
+
+BeginParams
+# Parameter definitions for outlet_49.5738_-119.0368 model - tightened ranges
+# name                    init    lwr     upr     tx_in   tx_ost  tx_out  fmt   file
+par_pet_correction       1.0     0.7     1.5     none    none    none    %g    outlet_49.5738_-119.0368.rvp.tpl
+par_hbv_beta            2.5     1.5     4.0     none    none    none    %g    outlet_49.5738_-119.0368.rvp.tpl
+par_max_perc_rate       8.0     2.0     25.0    none    none    none    %g    outlet_49.5738_-119.0368.rvp.tpl
+par_baseflow_coeff      0.3     0.05    0.8     none    none    none    %g    outlet_49.5738_-119.0368.rvp.tpl
+par_forest_coverage     0.6     0.2     0.9     none    none    none    %g    outlet_49.5738_-119.0368.rvp.tpl
+par_melt_factor         2.5     1.5     5.0     none    none    none    %g    outlet_49.5738_-119.0368.rvp.tpl
+par_refreeze_factor     2.0     1.0     3.5     none    none    none    %g    outlet_49.5738_-119.0368.rvp.tpl
+EndParams
+
+BeginResponseVars
+NSE .\model\output\Diagnostics.csv ; OST_NULL 2 3 ','
+EndResponseVars
+
+BeginTiedRespVars
+NegNSE 1 NSE wsum -1.00
+EndTiedRespVars
+
+BeginGCOP
+CostFunction NegNSE
+PenaltyFunction APM
+EndGCOP
+
+BeginConstraints
+EndConstraints
+
+RandomSeed 985735
+
+BeginDDSAlg
+PerturbationValue 0.15
+Iterations 5
+UseRandomParamValues
+EndDDSAlg

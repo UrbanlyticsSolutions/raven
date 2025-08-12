@@ -1,0 +1,41 @@
+--------------------------------------------------------------------------
+ OSTRICH version 17.12.19 (Built Dec 19 2017 @ 11:07:05)
+
+ A computer program for model-independent calibration and optimization.
+
+ Author             L. Shawn Matott
+ Copyright (C) 2007 L. Shawn Matott
+
+ This program is free software; you can redistribute 
+ it and/or modify it under the terms of the GNU  
+ General Public License as published by the Free 
+ Software Foundation; either version 2 of the 
+ License, or(at your option) any later version. 
+
+ This program is distributed in the hope that it will 
+ be useful, but WITHOUT ANY WARRANTY; without even 
+ the implied warranty of MERCHANTABILITY or FITNESS 
+ FOR A PARTICULAR PURPOSE. See the GNU General Public 
+ License for more details. 
+
+ You should have received a copy of the GNU General 
+ Public License along with this program; if not, 
+ write to the Free Software Foundation, Inc., 59 
+ Temple Place, Suite 330, Boston, MA 02111-1307 USA 
+--------------------------------------------------------------------------
+
+Ostrich Setup
+Model                  : Ost-RAVEN.bat > OstExeOut.txt
+Algorithm              : Dynamically Dimensioned Search Algorithm (DDS)
+Objective Function     : GCOP
+Number of Parameters   : 7
+Number of Tied Params  : 0
+Number of Observations : 0
+Seed for Random Nums.  : 985735
+Number of Resp. Vars        : 1
+Number of Tied Resp. Vars   : 1
+Number of Constraints       : 0
+Penalty Method              : Additive Penalty Method (APM)
+
+Ostrich Run Record
+trial    best fitness   par_pet_correction  par_hbv_beta  par_max_perc_rate  par_baseflow_coeff  par_forest_coverage  par_melt_factor  par_refreeze_factor   trials remaining

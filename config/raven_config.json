@@ -72,7 +72,7 @@
     "climate": {
       "precipitation_source": "ECCC_GRIDDED",
       "temperature_source": "ECCC_GRIDDED", 
-      "pet_method": "PRIESTLEY_TAYLOR",
+      "pet_method": "HARGREAVES_1985",
       "snow_data_required": true
     }
   },
@@ -135,7 +135,7 @@
   
   "model_structure": {
     "soil_layers": ["PONDED_WATER", "CANOPY", "SNOW", "SURFACE", "SOIL_0", "SOIL_1", "GROUNDWATER"],
-    "evaporation_method": "PET_PRIESTLEY_TAYLOR",
+    "evaporation_method": "PET_HARGREAVES_1985",
     "snow_model": "SNOBAL_SIMPLE",
     "infiltration_model": "GREEN_AMPT",
     "baseflow_model": "LINEAR_ANALYTIC"

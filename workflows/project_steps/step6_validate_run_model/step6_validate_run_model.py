@@ -57,7 +57,7 @@ except ImportError:
 # Basic functionality - no complex imports needed
 RAVENPY_AVAILABLE = False
 PLOTLY_AVAILABLE = False
-OSTRICH_AVAILABLE = False
+OSTRICH_AVAILABLE = True
 
 # Model registry for dynamic model handling - simplified
 MODEL_REGISTRY = {}
@@ -1688,18 +1688,18 @@ class Step6ValidateRunModel:
         }
         
         # Determine best calibration method available
-        if OSTRICH_AVAILABLE and self.ostrich_exe.exists():
+        if False:  # Skip OSTRICH for now
             print(f"  Using OSTRICH calibration")
-            calibration_result = self._run_ostrich_calibration(model_dir, model_name, step5_data, station_id)
+            calibration_result = self._run_ostrich_calibration(model_dir, model_name, step5_data, "08NN019")
             calibration_result['calibration_method'] = 'OSTRICH'
         elif RAVENPY_AVAILABLE:
             print(f"  Using RavenPy calibration")
             calibration_result = self._run_ravenpy_calibration(model_dir, model_name, step5_data)
             calibration_result['calibration_method'] = 'RavenPy'
         else:
-            print(f"  Falling back to simple grid search")
-            calibration_result = self._run_simple_calibration(model_dir, model_name, step5_data)
-            calibration_result['calibration_method'] = 'Simple Grid Search'
+            print(f"  Using scipy.optimize for parameter calibration")
+            calibration_result = self._run_scipy_calibration(model_dir, model_name, step5_data)
+            calibration_result['calibration_method'] = 'Scipy Optimization'
         
         return calibration_result
     
@@ -1758,7 +1758,7 @@ class Step6ValidateRunModel:
             obj_script = self._create_nash_sutcliffe_objective(calibration_dir, obs_data_prepared)
             
             # Run OSTRICH from calibration directory
-            cmd = ['ostrich']  # Try system ostrich first
+            cmd = [str(self.ostrich_exe)]
             
             print(f"    Running OSTRICH soil/land use parameter calibration...")
             print(f"    Parameters: Snow/melt (5), Soil (5), Land use (4) = 14 total")
@@ -1912,20 +1912,234 @@ class Step6ValidateRunModel:
         
         return calibration_result
     
-    def _run_simple_calibration(self, model_dir: Path, model_name: str, step5_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Run simple grid search calibration as fallback"""
+    def _run_scipy_calibration(self, model_dir: Path, model_name: str, step5_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Run calibration using scipy.optimize.differential_evolution"""
+        from scipy.optimize import differential_evolution
+        import numpy as np
+        
         calibration_result = {
             'success': False,
             'output_files': {},
             'calibration_summary': {},
-            'error': "Simple calibration not implemented - use OSTRICH or RavenPy"
+            'error': None
         }
         
-        print(f"    Simple calibration not implemented")
-        print(f"    Install OSTRICH or ensure RavenPy is available for calibration")
+        try:
+            print(f"    Setting up scipy differential evolution calibration...")
+            
+            # Define aggressive parameter bounds for 30% runoff target
+            bounds = [
+                (2.0, 15.0),    # BASEFLOW_COEFF - strong baseflow
+                (4.0, 15.0),    # HBV_BETA - aggressive soil drainage  
+                (2.0, 8.0),     # MAX_PERC_RATE - reduced percolation
+                (0.6, 1.0),     # PET_CORRECTION - reduce ET
+            ]
+            
+            param_names = ['BASEFLOW_COEFF', 'HBV_BETA', 'MAX_PERC_RATE', 'PET_CORRECTION']
+            
+            def objective_function(params):
+                """Objective function that runs RAVEN and calculates Nash-Sutcliffe"""
+                try:
+                    # Update RVP parameters
+                    self._update_rvp_parameters(model_dir, model_name, params, param_names)
+                    
+                    # Run RAVEN
+                    result = self._run_raven_for_calibration(model_dir, model_name)
+                    if not result['success']:
+                        return 999  # High penalty for failed runs
+                    
+                    # Calculate Nash-Sutcliffe efficiency
+                    nse = self._calculate_nash_sutcliffe(model_dir, model_name)
+                    if nse == -999:
+                        return 999  # High penalty for calculation failures
+                    return 1 - nse  # Minimize (1 - NSE) = maximize NSE
+                    
+                except Exception as e:
+                    print(f"      Error in objective function: {e}")
+                    return 999
+            
+            print(f"    Running differential evolution with {len(bounds)} parameters...")
+            print(f"    Target: Maximize runoff (30% target) through aggressive parameters")
+            
+            # Run optimization
+            result = differential_evolution(
+                objective_function,
+                bounds,
+                maxiter=20,      # Reasonable number of iterations
+                popsize=8,       # Population size
+                seed=42,         # Reproducible results
+                disp=True        # Show progress
+            )
+            
+            if result.success:
+                print(f"    Optimization converged: NSE = {1 - result.fun:.3f}")
+                
+                # Apply best parameters
+                best_params = result.x
+                self._update_rvp_parameters(model_dir, model_name, best_params, param_names)
+                
+                # Final run with best parameters
+                final_result = self._run_raven_for_calibration(model_dir, model_name)
+                
+                calibration_result['success'] = True
+                calibration_result['calibration_summary'] = {
+                    'best_nse': 1 - result.fun,
+                    'best_parameters': dict(zip(param_names, best_params)),
+                    'iterations': result.nit,
+                    'function_evaluations': result.nfev
+                }
+                
+                print(f"    Best parameters found:")
+                for name, value in zip(param_names, best_params):
+                    print(f"      {name}: {value:.3f}")
+                    
+            else:
+                calibration_result['error'] = f"Optimization failed: {result.message}"
+                print(f"    Optimization failed: {result.message}")
+            
+        except Exception as e:
+            calibration_result['error'] = f"Scipy calibration failed: {str(e)}"
+            print(f"    Scipy calibration error: {str(e)}")
         
         return calibration_result
     
+    def _update_rvp_parameters(self, model_dir: Path, model_name: str, params: list, param_names: list):
+        """Update RVP file with new parameter values"""
+        rvp_file = model_dir / f"{model_name}.rvp"
+        
+        # Read current RVP
+        with open(rvp_file, 'r') as f:
+            lines = f.readlines()
+        
+        # Update parameters based on names
+        param_dict = dict(zip(param_names, params))
+        
+        # Update specific parameter values in RVP content
+        for i, line in enumerate(lines):
+            if 'LOAM_FAST' in line and 'BASEFLOW_COEFF' in param_dict:
+                # Update FAST layer baseflow coefficient  
+                parts = line.split(',')
+                if len(parts) >= 6:
+                    parts[5] = f'              {param_dict["BASEFLOW_COEFF"]:.3f}'
+                    lines[i] = ','.join(parts)
+            
+            if 'HBV_BETA' in line and 'HBV_BETA' in param_dict:
+                # Update all HBV_BETA values
+                lines[i] = line.replace('8.000', f'{param_dict["HBV_BETA"]:.3f}')
+            
+            if 'MAX_PERC_RATE' in line and 'MAX_PERC_RATE' in param_dict:
+                # Update TOP layer percolation rate
+                lines[i] = line.replace('18.93', f'{param_dict["MAX_PERC_RATE"]:.2f}')
+                
+            if 'PET_CORRECTION' in line and 'PET_CORRECTION' in param_dict:
+                # Update PET correction
+                lines[i] = line.replace('1.0', f'{param_dict["PET_CORRECTION"]:.3f}')
+        
+        # Write updated RVP
+        with open(rvp_file, 'w') as f:
+            f.writelines(lines)
+    
+    def _run_raven_for_calibration(self, model_dir: Path, model_name: str) -> dict:
+        """Run RAVEN simulation and return success status"""
+        try:
+            import subprocess
+            raven_cmd = [
+                r"E:\python\Raven\RavenHydroFramework\build\Release\Raven.exe",
+                model_name,
+                "-o", "output"
+            ]
+            
+            result = subprocess.run(
+                raven_cmd,
+                cwd=model_dir,
+                capture_output=True,
+                text=True,
+                timeout=120
+            )
+            
+            return {'success': result.returncode == 0}
+            
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+    
+    def _calculate_nash_sutcliffe(self, model_dir: Path, model_name: str) -> float:
+        """Calculate Nash-Sutcliffe efficiency from RAVEN output"""
+        try:
+            import pandas as pd
+            import numpy as np
+            
+            # Read simulated data
+            sim_file = model_dir / "output" / "Hydrographs.csv"
+            if not sim_file.exists():
+                print(f"      Hydrographs.csv not found at {sim_file}")
+                return -999
+                
+            sim_df = pd.read_csv(sim_file)
+            sim_df['date'] = pd.to_datetime(sim_df['date'])
+            print(f"      Sim data: {len(sim_df)} records, {sim_df['date'].min()} to {sim_df['date'].max()}")
+            
+            # Find discharge column
+            discharge_col = None
+            for col in sim_df.columns:
+                if '[m3/s]' in col:
+                    discharge_col = col
+                    break
+            
+            if discharge_col is None:
+                print(f"      No discharge column found")
+                return -999
+            
+            # Read observed data from parent directory
+            obs_file = model_dir.parent.parent / "hydrometric" / "observed_streamflow.csv"
+            if not obs_file.exists():
+                print(f"      Observed data not found at {obs_file}")
+                return -999
+                
+            obs_df = pd.read_csv(obs_file)
+            obs_df['Date'] = pd.to_datetime(obs_df['Date'])
+            print(f"      Obs data: {len(obs_df)} records, {obs_df['Date'].min()} to {obs_df['Date'].max()}")
+            
+            # Merge simulated and observed on date
+            merged = pd.merge(
+                sim_df[['date', discharge_col]].rename(columns={'date': 'Date', discharge_col: 'sim_flow'}),
+                obs_df[['Date', 'Discharge_cms']].rename(columns={'Discharge_cms': 'obs_flow'}),
+                on='Date', 
+                how='inner'
+            )
+            
+            print(f"      Merged data: {len(merged)} matching dates")
+            
+            if len(merged) < 100:  # Need sufficient data
+                print(f"      Insufficient matching data: {len(merged)} days")
+                return -999
+            
+            # Remove NaN values
+            merged = merged.dropna()
+            print(f"      Valid data: {len(merged)} after removing NaN")
+            
+            if len(merged) == 0:
+                return -999
+            
+            obs_flow = merged['obs_flow'].values
+            sim_flow = merged['sim_flow'].values
+            
+            # Calculate Nash-Sutcliffe efficiency
+            numerator = np.sum((obs_flow - sim_flow) ** 2)
+            denominator = np.sum((obs_flow - np.mean(obs_flow)) ** 2)
+            
+            if denominator == 0:
+                print(f"      Zero variance in observed data")
+                return -999
+                
+            nse = 1 - (numerator / denominator)
+            
+            print(f"      NSE = {nse:.4f}, obs_mean={np.mean(obs_flow):.3f}, sim_mean={np.mean(sim_flow):.3f}")
+            return nse
+            
+        except Exception as e:
+            print(f"      NSE calculation error: {e}")
+            return -999
+
     def _setup_calibration_files(self, source_dir: Path, calibration_dir: Path, model_name: str):
         """Copy and setup model files for calibration"""
         # Copy all necessary files to calibration directory
@@ -2123,7 +2337,7 @@ class Step6ValidateRunModel:
             with open(config_path, 'w') as f:
                 f.write("ProgramType DDS\n")
                 f.write("ObjectiveFunction GCOP\n")
-                f.write("ModelExecutable cmd.exe /C \"raven_run.bat && python calc_objective.py\"\n")
+                f.write("ModelExecutable raven_run.bat\n")
                 f.write("PreserveBestModel\n")
                 f.write("PreserveModelOutput\n")
                 f.write("ObjFuncSeparator ;\n\n")
@@ -2134,47 +2348,50 @@ class Step6ValidateRunModel:
                 f.write(f"{model_name}_template.rvp ; {model_name}.rvp\n")
                 f.write("EndFilePairs\n\n")
                 
-                f.write("# Parameter definitions - soil, land use, and snow/melt parameters\n")
+                f.write("# Parameter definitions - aggressive ranges for higher flow generation\n")
                 f.write("BeginParams\n")
                 f.write("# Parameter_name     Init_value  Lower_bound  Upper_bound  Transformation\n")
-                f.write("# Snow/melt parameters\n")
-                f.write("par_rainsnow_temp        0.0        -2.0         3.0        none\n")
-                f.write("par_adiabatic_lapse      6.5         4.0        10.0        none\n")
-                f.write("par_precip_lapse         0.0         0.0         8.0        none\n")
-                f.write("par_snow_swi             0.05       0.01         0.2        none\n")
-                f.write("par_airsnow_coeff        0.05       0.01         0.2        none\n")
-                f.write("# Soil parameters (based on physical soil properties)\n")
-                f.write("par_porosity             0.45        0.30         0.60        none\n")
-                f.write("par_field_capacity       0.22        0.15         0.35        none\n")
-                f.write("par_wilting_point        0.08        0.04         0.15        none\n")
-                f.write("par_hbv_beta             1.2         0.5          4.0        none\n")
-                f.write("par_baseflow_coeff       0.05        0.001        0.5        none\n")
-                f.write("# Land use parameters (melt factors for different land covers)\n")
-                f.write("par_melt_factor          5.04        2.0          8.0        none\n")
-                f.write("par_min_melt_factor      2.2         1.0          4.0        none\n")
-                f.write("par_refreeze_factor      5.04        0.5          8.0        none\n")
-                f.write("par_forest_coverage      1.0         0.3          1.0        none\n")
+                f.write("# Snow/melt parameters - aggressive melt rates\n")
+                f.write("par_rainsnow_temp        1.0        -3.0         5.0        none\n")
+                f.write("par_adiabatic_lapse      6.5         3.0        12.0        none\n")
+                f.write("par_precip_lapse         2.0         0.0        15.0        none\n")
+                f.write("par_snow_swi             0.1        0.05         0.5        none\n")
+                f.write("par_airsnow_coeff        0.1        0.05         0.5        none\n")
+                f.write("# Soil parameters - aggressive flow generation\n")
+                f.write("par_porosity             0.4         0.25         0.7        none\n")
+                f.write("par_field_capacity       0.2         0.1          0.4        none\n")
+                f.write("par_wilting_point        0.08        0.02         0.2        none\n")
+                f.write("par_hbv_beta             8.0         2.0         20.0        none\n")
+                f.write("par_baseflow_coeff       5.0         1.0         25.0        none\n")
+                f.write("par_max_perc_rate       35.0        10.0         80.0        none\n")
+                f.write("par_baseflow_n          15.0         5.0         30.0        none\n")
+                f.write("par_pet_correction       0.8         0.5          1.2        none\n")
+                f.write("# Land use parameters - enhanced melt factors\n")
+                f.write("par_melt_factor          7.0         3.0         12.0        none\n")
+                f.write("par_min_melt_factor      3.0         1.5          6.0        none\n")
+                f.write("par_refreeze_factor      6.0         1.0         10.0        none\n")
+                f.write("par_forest_coverage      0.8         0.2          1.0        none\n")
                 f.write("EndParams\n\n")
                 
                 f.write("BeginTiedParams\nEndTiedParams\n\n")
                 
                 f.write("BeginResponseVars\n")
-                f.write("NS obj1.txt ; OST_NULL 1 ' ' ; keyword\n")
+                f.write("Q_sim output/Hydrographs.csv ; OST_NULL 2 ',' ; comma-separated\n")
                 f.write("EndResponseVars\n\n")
                 
                 f.write("BeginTiedRespVars\nEndTiedRespVars\n\n")
                 
                 f.write("BeginGCOP\n")
-                f.write("CostFunction NS\n")
+                f.write("CostFunction Q_sim\n")
                 f.write("PenaltyFunction APM\n")
                 f.write("EndGCOP\n\n")
                 
                 f.write("BeginConstraints\nEndConstraints\n\n")
                 
-                f.write("# DDS Algorithm Parameters\n")
+                f.write("# DDS Algorithm Parameters - aggressive search\n")
                 f.write("BeginDDS\n")
-                f.write("PerturbationValue 0.2\n")
-                f.write("MaxIterations 200\n")
+                f.write("PerturbationValue 0.3\n")
+                f.write("MaxIterations 500\n")
                 f.write("EndDDS\n\n")
                 
                 f.write("RandomSeed 123\n")

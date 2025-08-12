@@ -378,7 +378,8 @@ class RVTGenerator:
             f.write(f"\t:Longitude \t\t\t{longitude}\n")
             f.write("\t:Elevation \t\t\t1800\n")
             f.write(f"\t:MonthlyAveTemperature {monthly_temps_str}\n")
-            f.write("\t:MonthlyAveEvaporation 30.0 30.0 30.0 30.0 30.0 30.0 30.0 30.0 30.0 30.0 30.0 30.0\n\n")
+            # Remove MonthlyAveEvaporation - let PET_HARGREAVES_1985 calculate dynamically
+            # f.write("\t:MonthlyAveEvaporation 30.0 30.0 30.0 30.0 30.0 30.0 30.0 30.0 30.0 30.0 30.0 30.0\n\n")
             
             # MultiData section
             f.write(":MultiData\n")

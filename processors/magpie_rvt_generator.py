@@ -230,7 +230,8 @@ def convert_csv_to_magpie_rvt(csv_file_path, output_file_path, start_date=None):
         print("\t:Longitude \t\t\t-118.9439", file=f)
         print("\t:Elevation \t\t\t1800", file=f)
         print(f"\t:MonthlyAveTemperature {monthly_temps_str}", file=f)
-        print("\t:MonthlyAveEvaporation 30.0 30.0 30.0 30.0 30.0 30.0 30.0 30.0 30.0 30.0 30.0 30.0", file=f)
+        # Remove MonthlyAveEvaporation - let PET_HARGREAVES_1985 calculate dynamically  
+        # print("\t:MonthlyAveEvaporation 30.0 30.0 30.0 30.0 30.0 30.0 30.0 30.0 30.0 30.0 30.0 30.0", file=f)
         print("", file=f)
         
         print(":MultiData", file=f)

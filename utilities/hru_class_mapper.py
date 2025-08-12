@@ -177,8 +177,10 @@ class HRUClassMapper:
                             dominant_idx = np.argmax(counts)
                             dominant_lc_id = int(unique_values[dominant_idx])
                         else:
-                            # Default to most frequent
-                            dominant_lc_id = int(np.bincount(lc_values.astype(int)).argmax())
+                            # Default to most frequent (handle NaN values like BasinMaker)
+                            lc_values_clean = lc_values.copy()
+                            lc_values_clean = np.where(np.isnan(lc_values_clean), -1, lc_values_clean)  # Replace NaN with -1
+                            dominant_lc_id = int(np.bincount(lc_values_clean.astype(int)).argmax())
                     
                     # Map WorldCover ID to RAVEN classes
                     landcover_result = self.lookup_generator.classify_landcover_from_worldcover(dominant_lc_id)

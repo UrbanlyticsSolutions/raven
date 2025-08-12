@@ -304,9 +304,16 @@ class ClimateDataClient:
                                                          start_year: int = 1991, end_year: int = 2020,
                                                          output_path: Optional[Path] = None,
                                                          min_years: int = 20,
-                                                         format_type: str = 'ravenpy') -> Dict:
-        """Get 30-year climate normal data with advanced gap filling using IDW interpolation"""
+                                                         format_type: str = 'ravenpy',
+                                                         target_elevation_m: float = None,
+                                                         use_elevation_adjustment: bool = True,
+                                                         use_data_driven_parameters: bool = True) -> Dict:
+        """Get 30-year climate normal data with advanced gap filling using IDW interpolation with elevation adjustment"""
         print(f"Getting 30-year climate data for ({outlet_lat}, {outlet_lon}) with {search_radius_km}km search radius")
+        if use_elevation_adjustment and target_elevation_m:
+            print(f"Elevation adjustment: ENABLED (target: {target_elevation_m}m)")
+        else:
+            print(f"Elevation adjustment: DISABLED")
         
         try:
             # Create bbox around point
@@ -362,6 +369,13 @@ class ClimateDataClient:
                     df['station_lat'] = coords[1]
                     df['station_id'] = station_id
                     
+                    # Extract elevation (convert from string if needed)
+                    elevation_str = props.get("ELEVATION", "0")
+                    try:
+                        df['station_elevation'] = float(elevation_str) if elevation_str and elevation_str != "null" else np.nan
+                    except (ValueError, TypeError):
+                        df['station_elevation'] = np.nan
+                    
                     all_data.append(df)
                     successful_stations += 1
                     print(f"SUCCESS: Got {len(df)} records from {station_name}")
@@ -385,6 +399,27 @@ class ClimateDataClient:
             if not all_data:
                 return {'success': False, 'error': 'No climate data could be retrieved from any stations'}
             
+            # Determine target elevation and adjustment parameters
+            if use_elevation_adjustment:
+                if target_elevation_m is None:
+                    # Estimate target elevation from available data
+                    target_elevation_m = self._estimate_target_elevation(outlet_lat, outlet_lon, all_data)
+                
+                if use_data_driven_parameters:
+                    # Calculate site-specific lapse rates and gradients
+                    data_driven_params = self._calculate_data_driven_parameters(all_data, outlet_lat, outlet_lon)
+                else:
+                    # Use literature values
+                    data_driven_params = {
+                        'temperature_lapse_rate': -6.0,
+                        'precipitation_gradient': 0.0002,
+                        'stations_used': 0,
+                        'station_details': []
+                    }
+                    print("  Using literature-based parameters: -6.0°C/1000m, +20%/1000m")
+            else:
+                data_driven_params = None
+            
             # Combine and interpolate data using proper IDW interpolation
             print(f"Combining data from {len(all_data)} stations with IDW interpolation...")
             
@@ -400,11 +435,18 @@ class ClimateDataClient:
             result_df['PRECIP'] = 0.0
             
             # Apply IDW interpolation for each date
-            print("  Applying IDW interpolation for spatial interpolation...")
+            if use_elevation_adjustment and target_elevation_m:
+                print("  Applying IDW interpolation with elevation adjustment...")
+            else:
+                print("  Applying IDW interpolation for spatial interpolation...")
+            
+            # Track method usage for reporting
+            single_station_days = 0
+            multi_station_days = 0
             
             for date in full_dates:
                 # Collect station data for this date
-                station_values = {'TEMP_MAX': [], 'TEMP_MIN': [], 'PRECIP': [], 'distances': []}
+                station_values = {'TEMP_MAX': [], 'TEMP_MIN': [], 'PRECIP': [], 'distances': [], 'elevations': []}
                 
                 for df in all_data:
                     if date in df.index:
@@ -421,12 +463,48 @@ class ClimateDataClient:
                             station_values['TEMP_MIN'].append(row['TEMP_MIN'])
                             station_values['PRECIP'].append(row['PRECIP'] if not pd.isna(row['PRECIP']) else 0.0)
                             station_values['distances'].append(distance)
+                            station_values['elevations'].append(row.get('station_elevation', np.nan))
                 
-                # Apply IDW if we have valid station data
+                # Apply interpolation based on number of stations available
                 if len(station_values['distances']) > 0:
-                    result_df.loc[date, 'TEMP_MAX'] = self._idw_interpolation(station_values['TEMP_MAX'], station_values['distances'])
-                    result_df.loc[date, 'TEMP_MIN'] = self._idw_interpolation(station_values['TEMP_MIN'], station_values['distances'])
-                    result_df.loc[date, 'PRECIP'] = self._idw_interpolation(station_values['PRECIP'], station_values['distances'])
+                    if len(station_values['distances']) == 1:
+                        # SINGLE STATION: Apply direct elevation correction (no IDW)
+                        single_station_days += 1
+                        if use_elevation_adjustment and target_elevation_m:
+                            result_df.loc[date, 'TEMP_MAX'] = self._apply_direct_elevation_correction(
+                                station_values['TEMP_MAX'][0], station_values['elevations'][0], 
+                                target_elevation_m, 'temperature', data_driven_params)
+                            result_df.loc[date, 'TEMP_MIN'] = self._apply_direct_elevation_correction(
+                                station_values['TEMP_MIN'][0], station_values['elevations'][0], 
+                                target_elevation_m, 'temperature', data_driven_params)
+                            result_df.loc[date, 'PRECIP'] = self._apply_direct_elevation_correction(
+                                station_values['PRECIP'][0], station_values['elevations'][0], 
+                                target_elevation_m, 'precipitation', data_driven_params)
+                        else:
+                            # No elevation adjustment - direct assignment
+                            result_df.loc[date, 'TEMP_MAX'] = station_values['TEMP_MAX'][0]
+                            result_df.loc[date, 'TEMP_MIN'] = station_values['TEMP_MIN'][0]
+                            result_df.loc[date, 'PRECIP'] = station_values['PRECIP'][0]
+                    
+                    else:
+                        # MULTIPLE STATIONS: Use IDW with or without elevation adjustment
+                        multi_station_days += 1
+                        if use_elevation_adjustment and target_elevation_m:
+                            # Use elevation-adjusted IDW
+                            result_df.loc[date, 'TEMP_MAX'] = self._idw_interpolation_with_elevation(
+                                station_values['TEMP_MAX'], station_values['distances'], 
+                                station_values['elevations'], target_elevation_m, 'temperature', 2, data_driven_params)
+                            result_df.loc[date, 'TEMP_MIN'] = self._idw_interpolation_with_elevation(
+                                station_values['TEMP_MIN'], station_values['distances'], 
+                                station_values['elevations'], target_elevation_m, 'temperature', 2, data_driven_params)
+                            result_df.loc[date, 'PRECIP'] = self._idw_interpolation_with_elevation(
+                                station_values['PRECIP'], station_values['distances'], 
+                                station_values['elevations'], target_elevation_m, 'precipitation', 2, data_driven_params)
+                        else:
+                            # Use standard IDW
+                            result_df.loc[date, 'TEMP_MAX'] = self._idw_interpolation(station_values['TEMP_MAX'], station_values['distances'])
+                            result_df.loc[date, 'TEMP_MIN'] = self._idw_interpolation(station_values['TEMP_MIN'], station_values['distances'])
+                            result_df.loc[date, 'PRECIP'] = self._idw_interpolation(station_values['PRECIP'], station_values['distances'])
             
             # Fill remaining gaps with advanced temporal interpolation
             print("  Filling remaining gaps with seasonal patterns...")
@@ -439,6 +517,13 @@ class ClimateDataClient:
                 print(f"SUCCESS: Saved 30-year climate data: {output_path}")
             
             temp_completeness = (1 - result_df[['TEMP_MAX', 'TEMP_MIN']].isnull().any(axis=1).mean()) * 100
+            
+            # Report interpolation method usage
+            total_days = single_station_days + multi_station_days
+            if single_station_days > 0:
+                print(f"  Method usage: {multi_station_days} days IDW ({multi_station_days/total_days*100:.1f}%), {single_station_days} days single-station ({single_station_days/total_days*100:.1f}%)")
+            else:
+                print(f"  Method usage: {multi_station_days} days IDW (100.0%)")
             
             print(f"SUCCESS: 30-year climate data prepared")
             print(f"Period: {start_year}-{end_year} ({len(result_df)} days)")
@@ -518,6 +603,411 @@ class ClimateDataClient:
             return np.nan
         
         return weighted_sum / weight_sum
+
+    def _idw_interpolation_with_elevation(self, values, distances, station_elevations, target_elevation, 
+                                        variable_type='temperature', power=2, data_driven_params=None):
+        """
+        Inverse Distance Weighting interpolation with elevation adjustment
+        
+        Args:
+            values: List of values from stations
+            distances: List of distances to stations (km)
+            station_elevations: List of station elevations (m)
+            target_elevation: Target outlet elevation (m)
+            variable_type: 'temperature' or 'precipitation'
+            power: IDW power parameter (default=2)
+            data_driven_params: Dict with calculated lapse rates/gradients
+        
+        Returns:
+            Interpolated and elevation-adjusted value
+        """
+        if not values or not distances or not station_elevations:
+            return np.nan
+        
+        # Convert to numpy arrays
+        values = np.array(values)
+        distances = np.array(distances)
+        station_elevations = np.array(station_elevations)
+        
+        # Remove stations with invalid elevation data
+        valid_mask = ~np.isnan(station_elevations) & (station_elevations > 0)
+        if not np.any(valid_mask):
+            # Fall back to regular IDW if no elevation data
+            return self._idw_interpolation(values, distances, power)
+        
+        values = values[valid_mask]
+        distances = distances[valid_mask]
+        station_elevations = station_elevations[valid_mask]
+        
+        # Handle case where we have a station at the exact location
+        min_distance = 0.001  # 1 meter minimum distance
+        distances = np.maximum(distances, min_distance)
+        
+        # Apply elevation corrections to station values
+        adjusted_values = values.copy()
+        
+        if variable_type == 'temperature':
+            # Apply temperature lapse rate correction
+            if data_driven_params:
+                lapse_rate = data_driven_params['temperature_lapse_rate']
+            else:
+                lapse_rate = -6.0  # Default
+            elevation_diffs = target_elevation - station_elevations  # m
+            temp_adjustments = (elevation_diffs / 1000.0) * lapse_rate
+            adjusted_values = values + temp_adjustments
+            
+        elif variable_type == 'precipitation':
+            # Apply precipitation elevation gradient
+            if data_driven_params:
+                precip_gradient = data_driven_params['precipitation_gradient']
+            else:
+                precip_gradient = 0.0002  # Default +20% per 1000m
+            elevation_diffs = target_elevation - station_elevations  # m
+            precip_multipliers = 1.0 + (elevation_diffs * precip_gradient)
+            # Ensure reasonable bounds (0.5x to 3.0x)
+            precip_multipliers = np.clip(precip_multipliers, 0.5, 3.0)
+            adjusted_values = values * precip_multipliers
+        
+        # Calculate IDW weights
+        weights = 1.0 / (distances ** power)
+        
+        # Calculate weighted average of elevation-adjusted values
+        weighted_sum = np.sum(weights * adjusted_values)
+        weight_sum = np.sum(weights)
+        
+        if weight_sum == 0:
+            return np.nan
+        
+        return weighted_sum / weight_sum
+
+    def _apply_direct_elevation_correction(self, station_value, station_elevation, target_elevation, variable_type, data_driven_params=None):
+        """
+        Apply direct elevation correction to a single station value (no IDW)
+        
+        Args:
+            station_value: Value from the single station
+            station_elevation: Station elevation (m)
+            target_elevation: Target outlet elevation (m)
+            variable_type: 'temperature' or 'precipitation'
+            data_driven_params: Dict with calculated parameters
+        
+        Returns:
+            Elevation-corrected value
+        """
+        if pd.isna(station_value):
+            return np.nan
+        
+        # If no elevation data, return original value
+        if pd.isna(station_elevation) or station_elevation <= 0:
+            return station_value
+        
+        elevation_diff = target_elevation - station_elevation  # m
+        
+        if variable_type == 'temperature':
+            # Apply temperature lapse rate correction
+            if data_driven_params:
+                lapse_rate = data_driven_params['temperature_lapse_rate']
+            else:
+                lapse_rate = -6.0  # Default
+            temp_adjustment = (elevation_diff / 1000.0) * lapse_rate
+            return station_value + temp_adjustment
+            
+        elif variable_type == 'precipitation':
+            # Apply precipitation elevation gradient
+            if data_driven_params:
+                precip_gradient = data_driven_params['precipitation_gradient']
+            else:
+                precip_gradient = 0.0002  # Default +20% per 1000m
+            precip_multiplier = 1.0 + (elevation_diff * precip_gradient)
+            # Ensure reasonable bounds (0.5x to 3.0x)
+            precip_multiplier = np.clip(precip_multiplier, 0.5, 3.0)
+            return station_value * precip_multiplier
+        
+        return station_value
+
+    def _estimate_target_elevation(self, target_lat, target_lon, station_data):
+        """
+        Estimate target elevation using available station data or external service
+        
+        Args:
+            target_lat: Target latitude
+            target_lon: Target longitude 
+            station_data: List of station dataframes with elevation info
+            
+        Returns:
+            Estimated elevation in meters
+        """
+        # Method 1: Try to get elevation from USGS or similar service
+        try:
+            elevation = self._get_elevation_from_service(target_lat, target_lon)
+            if elevation and elevation > 0:
+                print(f"  Target elevation from elevation service: {elevation:.0f}m")
+                return elevation
+        except Exception as e:
+            print(f"  Elevation service unavailable: {e}")
+        
+        # Method 2: IDW interpolation from nearby stations with elevation data
+        station_elevations = []
+        station_distances = []
+        station_coords = []
+        
+        for df in station_data:
+            if len(df) > 0:
+                first_row = df.iloc[0]
+                station_elevation = first_row.get('station_elevation', np.nan)
+                if not pd.isna(station_elevation) and station_elevation > 0:
+                    station_lat = first_row.get('station_lat', np.nan)
+                    station_lon = first_row.get('station_lon', np.nan)
+                    if not pd.isna(station_lat) and not pd.isna(station_lon):
+                        distance = self._calculate_distance(target_lat, target_lon, station_lat, station_lon)
+                        station_elevations.append(station_elevation)
+                        station_distances.append(distance)
+                        station_coords.append((station_lat, station_lon, station_elevation))
+        
+        if len(station_elevations) >= 3:
+            # IDW interpolation of elevations
+            estimated_elevation = self._idw_interpolation(station_elevations, station_distances, power=2)
+            print(f"  Target elevation from station IDW ({len(station_elevations)} stations): {estimated_elevation:.0f}m")
+            return estimated_elevation
+        
+        elif len(station_elevations) >= 1:
+            # Use closest station elevation as estimate
+            closest_idx = np.argmin(station_distances)
+            closest_elevation = station_elevations[closest_idx]
+            closest_distance = station_distances[closest_idx]
+            print(f"  Target elevation from closest station ({closest_distance:.1f}km): {closest_elevation:.0f}m")
+            return closest_elevation
+            
+        else:
+            # Fallback: Use regional average for BC Interior mountains
+            fallback_elevation = 800.0
+            print(f"  Target elevation fallback (no station data): {fallback_elevation:.0f}m")
+            return fallback_elevation
+
+    def _get_elevation_from_service(self, lat, lon):
+        """Get elevation from USGS Elevation Point Query Service"""
+        try:
+            import requests
+            # USGS Elevation Point Query Service (free, no API key required)
+            url = f"https://epqs.nationalmap.gov/v1/json?x={lon}&y={lat}&units=Meters&includeDate=false"
+            response = requests.get(url, timeout=10)
+            response.raise_for_status()
+            data = response.json()
+            
+            if 'value' in data and data['value'] != -1000000:
+                return float(data['value'])
+        except Exception:
+            # Try backup service: Open-Elevation API
+            try:
+                url = f"https://api.open-elevation.com/api/v1/lookup?locations={lat},{lon}"
+                response = requests.get(url, timeout=10)
+                response.raise_for_status() 
+                data = response.json()
+                
+                if 'results' in data and len(data['results']) > 0:
+                    return float(data['results'][0]['elevation'])
+            except Exception:
+                pass
+        
+        return None
+
+    def _calculate_data_driven_parameters(self, station_data, target_lat, target_lon):
+        """
+        Calculate data-driven temperature lapse rate and precipitation gradient
+        from available station network
+        
+        Args:
+            station_data: List of station dataframes
+            target_lat: Target latitude for distance weighting
+            target_lon: Target longitude for distance weighting
+            
+        Returns:
+            Dict with calculated parameters
+        """
+        print("  Calculating data-driven elevation adjustment parameters...")
+        
+        # Collect station elevation and climate statistics
+        station_stats = []
+        
+        for df in station_data:
+            if len(df) < 30:  # Need sufficient data for statistics
+                continue
+                
+            first_row = df.iloc[0]
+            station_elevation = first_row.get('station_elevation', np.nan)
+            station_lat = first_row.get('station_lat', np.nan)
+            station_lon = first_row.get('station_lon', np.nan)
+            
+            if pd.isna(station_elevation) or station_elevation <= 0:
+                continue
+            if pd.isna(station_lat) or pd.isna(station_lon):
+                continue
+                
+            # Calculate climate statistics for this station
+            temp_max_mean = df['TEMP_MAX'].mean()
+            temp_min_mean = df['TEMP_MIN'].mean()
+            temp_mean = (temp_max_mean + temp_min_mean) / 2
+            annual_precip = df['PRECIP'].sum() / (len(df) / 365.25)  # Annualize
+            
+            distance = self._calculate_distance(target_lat, target_lon, station_lat, station_lon)
+            
+            if not pd.isna(temp_mean) and not pd.isna(annual_precip):
+                station_stats.append({
+                    'elevation': station_elevation,
+                    'temp_mean': temp_mean,
+                    'annual_precip': annual_precip,
+                    'distance': distance,
+                    'station_id': first_row.get('station_id', 'Unknown')
+                })
+        
+        print(f"    Using {len(station_stats)} stations with elevation and climate data")
+        
+        # Calculate temperature lapse rate
+        lapse_rate = self._calculate_temperature_lapse_rate(station_stats)
+        
+        # Calculate precipitation gradient  
+        precip_gradient = self._calculate_precipitation_gradient(station_stats)
+        
+        return {
+            'temperature_lapse_rate': lapse_rate,
+            'precipitation_gradient': precip_gradient,
+            'stations_used': len(station_stats),
+            'station_details': station_stats
+        }
+
+    def _calculate_temperature_lapse_rate(self, station_stats):
+        """Calculate temperature lapse rate from station data using regression"""
+        if len(station_stats) < 2:
+            print("    Insufficient stations for lapse rate calculation, using default -6.0°C/1000m")
+            return -6.0
+            
+        import numpy as np
+        
+        elevations = np.array([s['elevation'] for s in station_stats])
+        temperatures = np.array([s['temp_mean'] for s in station_stats])
+        distances = np.array([s['distance'] for s in station_stats])
+        
+        # Weight by inverse distance for local representativity
+        weights = 1.0 / np.maximum(distances, 1.0)  # Avoid division by zero
+        
+        # Weighted linear regression: temp = a * elevation + b
+        X = elevations.reshape(-1, 1)
+        
+        # Weighted least squares
+        W = np.diag(weights)
+        X_weighted = np.sqrt(W) @ X
+        y_weighted = np.sqrt(W) @ temperatures
+        
+        # Add intercept term
+        X_with_intercept = np.column_stack([np.ones(len(X_weighted)), X_weighted.flatten()])
+        
+        # Solve normal equations
+        try:
+            coeffs = np.linalg.lstsq(X_with_intercept, y_weighted, rcond=None)[0]
+            lapse_rate_per_m = coeffs[1]  # Slope coefficient
+            lapse_rate_per_1000m = lapse_rate_per_m * 1000.0
+            
+            # Calculate R² for quality assessment
+            y_pred = X_with_intercept @ coeffs
+            ss_tot = np.sum((y_weighted - np.mean(y_weighted))**2)
+            ss_res = np.sum((y_weighted - y_pred)**2)
+            r_squared = 1 - (ss_res / ss_tot) if ss_tot > 0 else 0
+            
+            # Validate reasonable range for temperature lapse rate
+            if -12.0 <= lapse_rate_per_1000m <= -3.0:
+                print(f"    Temperature lapse rate: {lapse_rate_per_1000m:.1f}°C/1000m (R²={r_squared:.2f})")
+                return lapse_rate_per_1000m
+            else:
+                print(f"    Calculated lapse rate {lapse_rate_per_1000m:.1f}°C/1000m outside reasonable range, using default -6.0°C/1000m")
+                return -6.0
+                
+        except np.linalg.LinAlgError:
+            print("    Regression failed, using default temperature lapse rate -6.0°C/1000m")
+            return -6.0
+
+    def _calculate_precipitation_gradient(self, station_stats):
+        """Calculate precipitation gradient separating valley and mountain stations"""
+        if len(station_stats) < 2:
+            print("    Insufficient stations for precipitation gradient calculation, using default +0.0002/m")
+            return 0.0002
+            
+        import numpy as np
+        
+        elevations = np.array([s['elevation'] for s in station_stats])
+        precips = np.array([s['annual_precip'] for s in station_stats])
+        distances = np.array([s['distance'] for s in station_stats])
+        
+        # Remove outliers (precip must be > 50mm and < 5000mm annually)
+        valid_mask = (precips > 50) & (precips < 5000)
+        if np.sum(valid_mask) < 2:
+            print("    Insufficient valid precipitation data, using default +0.0002/m") 
+            return 0.0002
+            
+        elevations = elevations[valid_mask]
+        precips = precips[valid_mask] 
+        distances = distances[valid_mask]
+        
+        # Separate valley and mountain stations
+        valley_threshold = 700  # m - typical valley/mountain boundary in BC Interior
+        valley_mask = elevations < valley_threshold
+        mountain_mask = elevations >= valley_threshold
+        
+        valley_elevations = elevations[valley_mask]
+        valley_precips = precips[valley_mask]
+        mountain_elevations = elevations[mountain_mask] 
+        mountain_precips = precips[mountain_mask]
+        
+        print(f"    Station distribution: {len(valley_elevations)} valley (<{valley_threshold}m), {len(mountain_elevations)} mountain (>={valley_threshold}m)")
+        
+        # Calculate separate gradients
+        valley_gradient = self._calculate_single_gradient(valley_elevations, valley_precips, "valley")
+        mountain_gradient = self._calculate_single_gradient(mountain_elevations, mountain_precips, "mountain")
+        
+        # Strategy: Use mountain gradient if available, otherwise valley, otherwise default
+        if mountain_gradient is not None and len(mountain_elevations) >= 2:
+            print(f"    Using mountain gradient: +{mountain_gradient*1000:.1f}%/1000m (from {len(mountain_elevations)} stations)")
+            return mountain_gradient
+        elif valley_gradient is not None and len(valley_elevations) >= 3:
+            # Valley gradient exists but is probably underestimated - boost it
+            boosted_gradient = min(valley_gradient * 2.5, 0.0004)  # Boost but cap at 40%/1000m
+            print(f"    Valley gradient +{valley_gradient*1000:.1f}%/1000m boosted to +{boosted_gradient*1000:.1f}%/1000m for mountain application")
+            return boosted_gradient
+        else:
+            print(f"    Insufficient data for elevation-specific gradients, using default +20%/1000m")
+            return 0.0002
+
+    def _calculate_single_gradient(self, elevations, precips, zone_name):
+        """Calculate precipitation gradient for a single elevation zone"""
+        if len(elevations) < 2:
+            return None
+            
+        import numpy as np
+        
+        try:
+            # Use log-linear model for better fit
+            log_precips = np.log(precips)
+            
+            # Simple linear regression
+            coeffs = np.polyfit(elevations, log_precips, 1)
+            gradient_per_m = coeffs[0]  # Slope in log space
+            
+            # Calculate R²
+            y_pred = np.polyval(coeffs, elevations)
+            ss_tot = np.sum((log_precips - np.mean(log_precips))**2)
+            ss_res = np.sum((log_precips - y_pred)**2)
+            r_squared = 1 - (ss_res / ss_tot) if ss_tot > 0 else 0
+            
+            # Validate reasonable range
+            if 0.0 <= gradient_per_m <= 0.001:
+                print(f"    {zone_name.capitalize()} gradient: +{gradient_per_m*1000:.1f}%/1000m (R²={r_squared:.2f}, n={len(elevations)})")
+                return gradient_per_m
+            else:
+                print(f"    {zone_name.capitalize()} gradient {gradient_per_m*1000:.1f}%/1000m outside reasonable range")
+                return None
+                
+        except Exception as e:
+            print(f"    {zone_name.capitalize()} gradient calculation failed: {e}")
+            return None
     
     def _fill_gaps_with_seasonal_patterns(self, df):
         """

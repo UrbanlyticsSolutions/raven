@@ -411,11 +411,12 @@ class Step5RAVENModel:
                 if subbasin.get('Lake_Cat', 0) > 0:
                     length_str = "ZERO-"
                 
-                # BasinMaker gauge naming logic
-                if gauged > 0:
-                    # Use actual gauge name if available
-                    rvh_name = str(subbasin.get('Obs_NM', f'gauge_{sub_id}')).replace(" ", "_")
+                # Subbasin naming logic - keep consistent naming
+                if 'Obs_NM' in subbasin and subbasin['Obs_NM'] and str(subbasin['Obs_NM']).strip():
+                    # Use actual observation station name if explicitly provided
+                    rvh_name = str(subbasin['Obs_NM']).replace(" ", "_")
                 else:
+                    # Always use sub{id} format for consistent naming
                     rvh_name = f"sub{sub_id}"
                 
                 f.write(f"  {sub_id:6d}  {rvh_name:<15}  {downstream_str:<12}  {channel_profile:<15}  {length_str:>10}  {gauged:>6}\n")
@@ -1442,10 +1443,14 @@ class Step5RAVENModel:
             # Discharge output enabled by setting outlet subbasin GAUGED = 1
             
             # Default evaluation metrics to match benchmark
-            metrics = output_config.get('evaluation_metrics', ['NASH_SUTCLIFFE', 'RMSE'])
+            metrics = output_config.get('evaluation_metrics', ['NASH_SUTCLIFFE', 'RMSE', 'KLING_GUPTA'])
             if metrics:
                 metrics_str = ' '.join(metrics)
                 f.write(f":EvaluationMetrics {metrics_str}\n")
+                
+            # Add evaluation period for calibration (using climate data period)
+            f.write(f":EvaluationPeriod CALIBRATION 1982-01-01 2010-12-31\n")
+            
             f.write("\n\n\n")
             
             # End command (RAVEN benchmark format - BasinMaker pattern: no RedirectToFile in RVI)
@@ -1607,8 +1612,8 @@ class Step5RAVENModel:
             
             # 3-layer soil parameter list like Pelly model
             f.write(":SoilParameterList\n")
-            f.write("  :Parameters,        POROSITY,  PET_CORRECTION,        HBV_BETA,          MAX_PERC_RATE,  BASEFLOW_COEFF,      BASEFLOW_N, MAX_CAP_RISE_RATE\n")
-            f.write("       :Units,               -,               -,               -,               -,               -,                        -,              mm/d\n")
+            f.write("  :Parameters,        POROSITY, FIELD_CAPACITY, SAT_WILT, PET_CORRECTION,        HBV_BETA,          MAX_PERC_RATE,  BASEFLOW_COEFF,      BASEFLOW_N, MAX_CAP_RISE_RATE\n")
+            f.write("       :Units,               -,               -,               -,               -,               -,               -,               -,                        -,              mm/d\n")
             
             # Generate parameters for each 3-layer soil system
             for soil_class in sorted(actual_soil_classes):
@@ -1623,14 +1628,18 @@ class Step5RAVENModel:
                     base_hbv_beta = 4.142
                     base_pet_correction = 1.0
                 
+                # Default soil hydraulic properties
+                field_capacity = 0.118
+                sat_wilt = 0.0
+                
                 # TOP layer (like Pelly TOPSOIL): No baseflow, high percolation
-                f.write(f"         {soil_class}_TOP,              {base_porosity:.1f},              {base_pet_correction:.1f},              {base_hbv_beta:.3f},             {18.93:.2f},              0,                                0,               2.5,\n")
+                f.write(f"         {soil_class}_TOP,              {base_porosity:.1f},              {field_capacity:.3f},              {sat_wilt:.3f},              {base_pet_correction:.1f},              {base_hbv_beta:.3f},             {18.93:.2f},              0,                                0,               2.5,\n")
                 
                 # FAST layer (like Pelly FAST_RES): Strong baseflow, medium percolation  
-                f.write(f"         {soil_class}_FAST,              {base_porosity:.1f},              {base_pet_correction:.1f},              {base_hbv_beta:.3f},             {14.65:.2f},              {2.070:.3f},               {9.744:.3f},     3.5,\n")
+                f.write(f"         {soil_class}_FAST,              {base_porosity:.1f},              {field_capacity:.3f},              {sat_wilt:.3f},              {base_pet_correction:.1f},              {base_hbv_beta:.3f},             {14.65:.2f},              {2.070:.3f},               {9.744:.3f},     3.5,\n")
                 
                 # SLOW layer (like Pelly SLOW_RES): Weak baseflow, no deep percolation
-                f.write(f"         {soil_class}_SLOW,              {base_porosity:.1f},              {base_pet_correction:.1f},              {base_hbv_beta:.3f},             0,                         {0.025:.3f},               {9.744:.3f},     1.0,\n")
+                f.write(f"         {soil_class}_SLOW,              {base_porosity:.1f},              {field_capacity:.3f},              {sat_wilt:.3f},              {base_pet_correction:.1f},              {base_hbv_beta:.3f},             0,                         {0.025:.3f},               {9.744:.3f},     1.0,\n")
             
             f.write(":EndSoilParameterList\n")
             
@@ -1951,6 +1960,9 @@ class Step5RAVENModel:
         # Clean up temporary file
         temp_climate_csv.unlink(missing_ok=True)
         
+        # Add observed streamflow data for calibration if available
+        self._add_observed_streamflow_data(rvt_file)
+        
         # Add hydrometric observation gauges if available (BasinMaker format)
         obs_dir = outlet_dir / "obs"
         if obs_dir.exists():
@@ -1962,26 +1974,89 @@ class Step5RAVENModel:
                 with open(rvt_file, 'a') as f:
                     f.write("\n# Hydrometric observation gauges\n")
                     for obs_file in obs_files:
-                        # Extract station info from filename (e.g., TRAPPING_CREEK_08NN019_50.rvt)
-                        station_name = obs_file.stem.replace("_", " ")
+                        # Extract station info from filename and use underscores (e.g., TRAPPING_CREEK_NEAR_THE_MOUTH_08NN019_39)
+                        station_name = obs_file.stem
                         f.write(f":Gauge {station_name}\n")
-                        f.write(f"  :Latitude {latitude}\n")
-                        f.write(f"  :Longitude {longitude}\n")
-                        
-                        # Calculate monthly average temperatures from climate data dynamically
-                        monthly_temps = self._calculate_monthly_average_temperatures()
-                        temp_str = ' '.join([f"{temp:.1f}" for temp in monthly_temps])
-                        f.write(f"  :MonthlyAveTemperature {temp_str}\n")
-                        
-                        # Remove MonthlyAveEvaporation - let Hargreaves calculate PET dynamically
-                        # f.write(f"  :MonthlyAveEvaporation {pet_str}\n")
-                        
-                        f.write(f"  :RedirectToFile ./obs/{obs_file.name}\n")
+                        f.write(f":Latitude {latitude}\n")
+                        f.write(f":Longitude {longitude}\n")
+                        f.write(f":Elevation 1800\n")
+                        f.write(f":RedirectToFile obs/{obs_file.name}\n")
                         f.write(f":EndGauge\n\n")
             
 
         
         return rvt_file
+    
+    def _add_observed_streamflow_data(self, rvt_file: Path):
+        """Add observed streamflow data to RVT file for calibration"""
+        try:
+            # Check if observed streamflow data exists
+            hydrometric_dir = self.workspace_dir / "hydrometric"
+            obs_file = hydrometric_dir / "observed_streamflow.csv"
+            
+            if not obs_file.exists():
+                print(f"  No observed streamflow data found at {obs_file}")
+                return
+                
+            # Read observed data
+            obs_df = pd.read_csv(obs_file)
+            obs_df['Date'] = pd.to_datetime(obs_df['Date'])
+            
+            # Filter out NaN discharge values
+            obs_df = obs_df.dropna(subset=['Discharge_cms'])
+            
+            if len(obs_df) == 0:
+                print(f"  No valid observed streamflow data found")
+                return
+                
+            print(f"  Adding {len(obs_df)} observed streamflow data points for calibration")
+            
+            # Append observed data to RVT file in Raven format  
+            with open(rvt_file, 'a') as f:
+                f.write("\n\n# Observed streamflow data for calibration\n")
+                # Find the correct outlet subbasin ID dynamically
+                outlet_subbasin_id = self._get_outlet_subbasin_id()
+                f.write(f":ObservationData HYDROGRAPH {outlet_subbasin_id} m3/s\n")
+                
+                # Write start date and count
+                start_date = obs_df['Date'].iloc[0].strftime('%Y-%m-%d')
+                f.write(f"   {start_date} 00:00:00 1 {len(obs_df)}\n")
+                
+                # Write one value per line
+                for _, row in obs_df.iterrows():
+                    discharge = row['Discharge_cms']
+                    f.write(f"{discharge:.3f}\n")
+                    
+                f.write(":EndObservationData\n")
+                
+        except Exception as e:
+            print(f"  Warning: Could not add observed streamflow data: {e}")
+            # Don't fail the entire process if observed data can't be added
+    
+    def _get_outlet_subbasin_id(self) -> int:
+        """Find the outlet subbasin ID from the shapefile"""
+        try:
+            import geopandas as gpd
+            subbasins_file = self.workspace_dir / "data" / "subbasins.shp"
+            if not subbasins_file.exists():
+                print(f"  Warning: Subbasins file not found, using default ID 39")
+                return 39
+                
+            subbasins_gdf = gpd.read_file(subbasins_file)
+            
+            # Find outlet subbasin (DowSubId = -1)
+            outlet_subbasins = subbasins_gdf[subbasins_gdf['DowSubId'] == -1]
+            if len(outlet_subbasins) > 0:
+                outlet_id = int(outlet_subbasins.iloc[0]['SubId'])
+                print(f"  Found outlet subbasin ID: {outlet_id}")
+                return outlet_id
+            else:
+                print(f"  Warning: No outlet subbasin found, using default ID 39")
+                return 39
+                
+        except Exception as e:
+            print(f"  Warning: Could not determine outlet subbasin ID: {e}, using default 39")
+            return 39
     
     def _generate_rvt_from_daymet(self, daymet_file: Path, output_file: Path, outlet_name: str, latitude: float, longitude: float):
         """Generate RVT file from Daymet data by copying and modifying the existing RVT"""
