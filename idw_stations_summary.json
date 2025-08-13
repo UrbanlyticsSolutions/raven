@@ -1,0 +1,120 @@
+{
+  "search_location": {
+    "latitude": 49.5738,
+    "longitude": -119.0368
+  },
+  "search_radius_km": 50.0,
+  "total_stations": 24,
+  "stations_summary": [
+    {
+      "rank": 1,
+      "station_id": "112C991",
+      "station_name": "KELOWNA N GLENMORE",
+      "latitude": 49.93333333333333,
+      "longitude": -119.43333333333334,
+      "elevation_m": "451.00",
+      "first_date": "1984-12-01 00:00:00",
+      "last_date": "1986-09-30 00:00:00",
+      "has_daily_data": false
+    },
+    {
+      "rank": 2,
+      "station_id": "1123750",
+      "station_name": "JOE RICH CREEK",
+      "latitude": 49.85722222222222,
+      "longitude": -119.12611111111111,
+      "elevation_m": "874.80",
+      "first_date": "1928-09-01 00:00:00",
+      "last_date": "2008-12-31 00:00:00",
+      "has_daily_data": false
+    },
+    {
+      "rank": 3,
+      "station_id": "1123930",
+      "station_name": "KELOWNA",
+      "latitude": 49.9,
+      "longitude": -119.46666666666667,
+      "elevation_m": "353.60",
+      "first_date": "1899-03-01 00:00:00",
+      "last_date": "1962-09-30 00:00:00",
+      "has_daily_data": false
+    },
+    {
+      "rank": 4,
+      "station_id": "1123970",
+      "station_name": "KELOWNA A",
+      "latitude": 49.95611111111111,
+      "longitude": -119.37777777777778,
+      "elevation_m": "429.50",
+      "first_date": "1968-10-01 00:00:00",
+      "last_date": "2005-09-30 00:00:00",
+      "has_daily_data": false
+    },
+    {
+      "rank": 5,
+      "station_id": "1123972",
+      "station_name": "KELOWNA BANKHEAD",
+      "latitude": 49.9,
+      "longitude": -119.3,
+      "elevation_m": null,
+      "first_date": "1914-03-01 00:00:00",
+      "last_date": "1931-06-30 00:00:00",
+      "has_daily_data": false
+    },
+    {
+      "rank": 6,
+      "station_id": "1123975",
+      "station_name": "KELOWNA BOWES STREET",
+      "latitude": 49.88333333333333,
+      "longitude": -119.46666666666667,
+      "elevation_m": "350.50",
+      "first_date": "1961-08-01 00:00:00",
+      "last_date": "1969-11-30 00:00:00",
+      "has_daily_data": false
+    },
+    {
+      "rank": 7,
+      "station_id": "1123980",
+      "station_name": "KELOWNA CDA",
+      "latitude": 49.86666666666667,
+      "longitude": -119.41666666666667,
+      "elevation_m": "484.60",
+      "first_date": "1950-01-01 00:00:00",
+      "last_date": "1970-04-30 00:00:00",
+      "has_daily_data": false
+    },
+    {
+      "rank": 8,
+      "station_id": "1123982",
+      "station_name": "KELOWNA DAV-SPIERS ROAD",
+      "latitude": 49.85111111111111,
+      "longitude": -119.445,
+      "elevation_m": "375.00",
+      "first_date": "1978-06-01 00:00:00",
+      "last_date": "2004-09-30 00:00:00",
+      "has_daily_data": false
+    },
+    {
+      "rank": 9,
+      "station_id": "1123984",
+      "station_name": "KELOWNA EAST",
+      "latitude": 49.8595,
+      "longitude": -119.39666666666666,
+      "elevation_m": "491.00",
+      "first_date": "1980-08-01 00:00:00",
+      "last_date": "2000-11-30 00:00:00",
+      "has_daily_data": false
+    },
+    {
+      "rank": 10,
+      "station_id": "1123992",
+      "station_name": "KELOWNA PC BURNETTS NURSERY",
+      "latitude": 49.87416666666667,
+      "longitude": -119.4835,
+      "elevation_m": "349.90",
+      "first_date": "1969-01-01 00:00:00",
+      "last_date": "2003-04-30 00:00:00",
+      "has_daily_data": false
+    }
+  ]
+}
